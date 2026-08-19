@@ -19,6 +19,9 @@ LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.ex
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
+UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/releases/download"
+UMU_DEST="$HOME/.local/share/somnilux/umu"
+UMU_RUN_BIN="$UMU_DEST/umu-run"
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -140,10 +143,11 @@ ui_msg() {
     read -r -p "Press Enter to continue..." _
 }
 
-# Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
+# Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION,
+# DEFAULT_UMU_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
-    local proton_txt default_txt
+    local proton_txt default_txt umu_txt
 
     dbg "fetch_supported_versions: curl proton.txt starting"
     if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
@@ -161,10 +165,19 @@ fetch_supported_versions() {
     fi
     dbg "fetch_supported_versions: curl default.txt done, got [$default_txt]"
 
+    dbg "fetch_supported_versions: curl umu.txt starting"
+    if ! umu_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/umu.txt"); then
+        dbg "fetch_supported_versions: curl umu.txt FAILED"
+        ui_msg "Error" "Could not fetch the supported umu-launcher version from GitHub. Check your internet connection."
+        exit 1
+    fi
+    dbg "fetch_supported_versions: curl umu.txt done, got [$umu_txt]"
+
     mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
     DEFAULT_PROTON_VERSION=$(sed -n '1p' <<< "$default_txt")
     DEFAULT_WINE_VERSION=$(sed -n '2p' <<< "$default_txt")
-    dbg "fetch_supported_versions: exit DEFAULT_PROTON_VERSION=$DEFAULT_PROTON_VERSION DEFAULT_WINE_VERSION=$DEFAULT_WINE_VERSION"
+    DEFAULT_UMU_VERSION=$(sed -n '1p' <<< "$umu_txt")
+    dbg "fetch_supported_versions: exit DEFAULT_PROTON_VERSION=$DEFAULT_PROTON_VERSION DEFAULT_WINE_VERSION=$DEFAULT_WINE_VERSION DEFAULT_UMU_VERSION=$DEFAULT_UMU_VERSION"
 }
 
 # pick_proton_version outvar
@@ -372,6 +385,51 @@ download_proton() {
     dbg "download_proton: exit, moved to dest"
 }
 
+# download_umu version
+# Downloads and vendors our own private copy of umu-run (the umu-launcher
+# zipapp release) into UMU_DEST, so launching never depends on a system
+# package or PATH -- only python3, which is effectively universal. No-ops
+# if already vendored.
+download_umu() {
+    dbg "download_umu: enter version=[$1]"
+    local version="$1"
+
+    if [ -x "$UMU_RUN_BIN" ]; then
+        dbg "download_umu: already vendored, skipping"
+        echo "umu-run already present, skipping download."
+        return
+    fi
+
+    local url="$UMU_RELEASE_BASE_URL/$version/umu-launcher-$version-zipapp.tar"
+    local workdir
+    workdir=$(mktemp -d)
+    dbg "download_umu: workdir=[$workdir] url=[$url]"
+
+    echo "Downloading umu-run $version..."
+    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$workdir/umu.tar" "$url"; then
+        dbg "download_umu: curl FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to download umu-run $version. Check your internet connection."
+        exit 1
+    fi
+    dbg "download_umu: curl done"
+
+    echo "Extracting..."
+    if ! tar -xf "$workdir/umu.tar" -C "$workdir"; then
+        dbg "download_umu: tar FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to extract umu-run $version."
+        exit 1
+    fi
+    dbg "download_umu: tar done"
+
+    mkdir -p "$UMU_DEST"
+    mv "$workdir/umu/umu-run" "$UMU_RUN_BIN"
+    chmod +x "$UMU_RUN_BIN"
+    rm -rf "$workdir"
+    dbg "download_umu: exit, vendored to $UMU_RUN_BIN"
+}
+
 # install_patched_dlls proton_dir
 # Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
 install_patched_dlls() {
@@ -568,8 +626,8 @@ run_in_prefix() {
     dbg "run_in_prefix: enter proton_dir=[$1] prefix_path=[$2]"
     local proton_dir="$1" prefix_path="$2"
     shift 2
-    dbg "run_in_prefix: calling umu-run with args: $*"
-    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" umu-run "$@"
+    dbg "run_in_prefix: calling $UMU_RUN_BIN with args: $*"
+    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" "$UMU_RUN_BIN" "$@"
     dbg "run_in_prefix: umu-run returned rc=$?"
 }
 
@@ -608,6 +666,7 @@ create_desktop_entry() {
     local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
     local source_icon="$prefix_path/$ICON_REL_PATH"
     local icon_line=""
+    local launch_log="$HOME/.local/share/somnilux/launch.log"
 
     mkdir -p "$apps_dir"
 
@@ -629,7 +688,7 @@ create_desktop_entry() {
 Type=Application
 Name=Somnium Space
 Comment=Somnium Space VR, via somnilux
-Exec=env PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID=umu-somnium umu-run "$launcher_path"
+Exec=sh -c 'mkdir -p "\$(dirname "\$1")" && env PROTONPATH="\$2" WINEPREFIX="\$3" GAMEID=umu-somnium "\$4" "\$5" >"\$1" 2>&1' sh "$launch_log" "$proton_dir" "$prefix_path" "$UMU_RUN_BIN" "$launcher_path"
 Terminal=false
 Categories=Game;
 $icon_line
@@ -660,6 +719,8 @@ main() {
             install_flow installer_path prefix_path proton_version proton_dir
             dbg "main: install_flow returned installer_path=[$installer_path] prefix_path=[$prefix_path] proton_version=[$proton_version] proton_dir=[$proton_dir]"
 
+            dbg "main: calling download_umu"
+            download_umu "$DEFAULT_UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_prefix_and_run_installer"
@@ -667,7 +728,7 @@ main() {
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix_path" "$proton_dir"
 
-            ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry."
+            ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: install branch done"
             ;;
         repair)
@@ -683,12 +744,14 @@ main() {
             proton_version="${proton_version%-somnilux}"
             dbg "main: derived proton_version=[$proton_version]"
 
+            dbg "main: calling download_umu"
+            download_umu "$DEFAULT_UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix" "$proton_dir"
 
-            ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed."
+            ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: repair branch done"
             ;;
     esac
