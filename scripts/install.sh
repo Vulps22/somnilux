@@ -672,7 +672,7 @@ show_installer_tips() {
 
 A few tips:
 
-- A shortcut has already been added to your applications menu (this works on GNOME, KDE Plasma, XFCE, and most other Linux desktops).
+- Once the installer has finished, a shortcut will be added to your applications menu (this works on GNOME, KDE Plasma, XFCE, and most other Linux desktops).
 
 - In the Launcher's settings, turn off \"minimize to taskbar\". Wine has no system tray for it to minimize into, so the window can vanish entirely and need to be killed manually to close.
 
