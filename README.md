@@ -13,10 +13,12 @@ bugs that this app happens to trigger.
 
 ## Status
 
-Work in progress. The underlying bugs are found, fixed, and confirmed
-working end-to-end (Launcher reaches its home page and connects into VR) —
-what's left is packaging this into a one-command setup script for other
-users. See `patches/` for the current state of the fixes themselves.
+Working. Run `scripts/install.sh` to install or repair a Somnium Space
+setup on Linux.
+
+This release is verified working with Somnium Space **3.2.5**. If you're
+on a newer version and still running into problems, check whether a newer
+release of this script is available.
 
 ## What's fixed
 
@@ -48,9 +50,10 @@ Wine/Proton:
   source" obligation for the prebuilt binaries below is satisfied: the
   unmodified base is already public (`wine-mirror/wine` /
   `gitlab.winehq.org/wine/wine`), and our diff on top of it is here.
-- `scripts/` — *(coming soon)* the setup script: downloads a pinned GE-Proton
-  release, downloads this project's prebuilt patched `secur32`/`crypt32`/
-  `rsaenh`, and wires up a working prefix.
+- `scripts/install.sh` — the setup script: downloads a GE-Proton release,
+  downloads this project's prebuilt patched `secur32`/`crypt32`/`rsaenh`,
+  and wires up a working prefix. Handles both a fresh install and
+  repairing an existing one.
 
 ## License
 
