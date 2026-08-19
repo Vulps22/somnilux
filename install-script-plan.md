@@ -22,6 +22,8 @@ runnable change — not left half-done across commits.
 - At startup, check whether `whiptail` is available. If not, fall back to
   plain `read`-based text prompts — no attempt to detect the user's distro
   or offer an install command for `whiptail`.
+- Every `whiptail` screen uses `--backtitle "somnilux — github.com/Vulps22/somnilux"`
+  so the repo link is always visible, pinned at the top.
 
 ## Top-level flow
 
