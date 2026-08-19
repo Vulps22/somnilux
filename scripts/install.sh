@@ -23,6 +23,7 @@ UMU_VERSION="1.4.4"
 UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/releases/download"
 UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
+UMU_VERSION_STAMP="$UMU_DEST/version"
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -437,16 +438,17 @@ download_proton() {
 # Downloads and vendors our own private copy of umu-run (the umu-launcher
 # zipapp release) into UMU_DEST, so launching never depends on a system
 # package or PATH -- only python3, which is effectively universal. No-ops
-# if already vendored.
+# if the requested version is already vendored.
 download_umu() {
     dbg "download_umu: enter version=[$1]"
     local version="$1"
 
-    if [ -x "$UMU_RUN_BIN" ]; then
-        dbg "download_umu: already vendored, skipping"
-        echo "umu-run already present, skipping download."
+    if [ -x "$UMU_RUN_BIN" ] && [ "$(cat "$UMU_VERSION_STAMP" 2>/dev/null)" = "$version" ]; then
+        dbg "download_umu: version $version already vendored, skipping"
+        echo "umu-run $version already present, skipping download."
         return
     fi
+    dbg "download_umu: not vendored at version $version, (re)downloading"
 
     local url="$UMU_RELEASE_BASE_URL/$version/umu-launcher-$version-zipapp.tar"
     local workdir
@@ -474,6 +476,7 @@ download_umu() {
     mkdir -p "$UMU_DEST"
     mv "$workdir/umu/umu-run" "$UMU_RUN_BIN"
     chmod +x "$UMU_RUN_BIN"
+    printf '%s\n' "$version" > "$UMU_VERSION_STAMP"
     rm -rf "$workdir"
     dbg "download_umu: exit, vendored to $UMU_RUN_BIN"
 }
