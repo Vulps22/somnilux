@@ -105,29 +105,6 @@ ui_input() {
     dbg "ui_input: fallback got value=[$__ui_out]"
 }
 
-# ui_yesno title prompt
-# Returns 0 for yes, 1 for no. No output value, so no nameref needed.
-ui_yesno() {
-    dbg "ui_yesno: enter title=[$1]"
-    local title="$1" prompt="$2"
-
-    if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
-        sleep 0.2
-        local rc=0
-        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 1>&2 || rc=$?
-        dbg "ui_yesno: whiptail --yesno returned rc=$rc"
-        return "$rc"
-    fi
-
-    echo "== $title ==" >&2
-    local value
-    read -r -p "$prompt [y/N]: " value
-    case "$value" in
-        [Yy]*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 # ui_msg title message [height] [width]
 # No output value, so no nameref needed. Always succeeds: dismissing an
 # informational box isn't a choice, and under set -e any non-zero return
