@@ -279,6 +279,22 @@ install_patched_dlls() {
     done
 }
 
+# run_in_prefix proton_dir prefix_path -- executable [args...]
+run_in_prefix() {
+    local proton_dir="$1" prefix_path="$2"
+    shift 2
+    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" umu-run "$@"
+}
+
+# create_prefix_and_run_installer installer_path prefix_path proton_dir
+create_prefix_and_run_installer() {
+    local installer_path="$1" prefix_path="$2" proton_dir="$3"
+
+    mkdir -p "$prefix_path"
+    echo "Creating the prefix and launching the Somnium installer..."
+    run_in_prefix "$proton_dir" "$prefix_path" "$installer_path"
+}
+
 main() {
     local mode
     mode=$(main_menu)
