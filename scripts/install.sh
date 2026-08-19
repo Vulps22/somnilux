@@ -174,10 +174,12 @@ repair_flow() {
 # find_proton_dir_for_prefix prefix_path
 # Looks for a single *-somnilux sibling directory next to the prefix. If
 # there isn't exactly one, asks the user which Proton version it is via
-# the normal version picker. Echoes the resolved Proton directory.
+# the normal version picker. Echoes the resolved Proton directory -- which
+# may not exist yet, same as a fresh install; the caller (setup_proton_and_dlls)
+# downloads it if needed.
 find_proton_dir_for_prefix() {
     local prefix_path="$1"
-    local parent candidates=() proton_version proton_dir
+    local parent candidates=() proton_version
 
     parent=$(dirname "$prefix_path")
     while IFS= read -r -d '' candidate; do
@@ -190,14 +192,7 @@ find_proton_dir_for_prefix() {
     fi
 
     proton_version=$(pick_proton_version)
-    proton_dir="$parent/${proton_version}-somnilux"
-
-    if [ ! -d "$proton_dir" ]; then
-        ui_msg "Error" "No Proton install found at $proton_dir for the version you picked."
-        exit 1
-    fi
-
-    echo "$proton_dir"
+    echo "$parent/${proton_version}-somnilux"
 }
 
 # Expands a leading ~ to $HOME. Echoes the result to stdout.
