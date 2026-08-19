@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'stty sane 2>/dev/null || true' EXIT
+trap 'stty sane 2>/dev/null || true; tput rmcup 2>/dev/null || true' EXIT
 
 DEBUG_LOG="/tmp/somnilux-debug.log"
 : > "$DEBUG_LOG"
@@ -34,9 +34,11 @@ ui_menu() {
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         dbg "ui_menu: calling whiptail --menu"
-        whiptail --backtitle "$BACKTITLE" --title "$title" --menu "$prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3
-        dbg "ui_menu: whiptail --menu returned rc=$?"
-        return
+        local rc=0 out
+        out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --menu "$prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || rc=$?
+        dbg "ui_menu: whiptail --menu returned rc=$rc out=[$out]"
+        echo "$out"
+        return "$rc"
     fi
 
     echo "== $title ==" >&2
@@ -74,9 +76,11 @@ ui_input() {
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         dbg "ui_input: calling whiptail --inputbox"
-        whiptail --backtitle "$BACKTITLE" --title "$title" --inputbox "$prompt" 12 78 "$default" 3>&1 1>&2 2>&3
-        dbg "ui_input: whiptail --inputbox returned rc=$?"
-        return
+        local rc=0 out
+        out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --inputbox "$prompt" 12 78 "$default" 3>&1 1>&2 2>&3) || rc=$?
+        dbg "ui_input: whiptail --inputbox returned rc=$rc out=[$out]"
+        echo "$out"
+        return "$rc"
     fi
 
     echo "== $title ==" >&2
@@ -94,9 +98,10 @@ ui_yesno() {
     local title="$1" prompt="$2"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
-        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78
-        dbg "ui_yesno: whiptail --yesno returned rc=$?"
-        return
+        local rc=0
+        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 || rc=$?
+        dbg "ui_yesno: whiptail --yesno returned rc=$rc"
+        return "$rc"
     fi
 
     echo "== $title ==" >&2
@@ -114,10 +119,11 @@ ui_msg() {
     local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
-        dbg "ui_msg: calling whiptail --msgbox"
-        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width"
-        dbg "ui_msg: whiptail --msgbox returned rc=$?"
-        return
+        dbg "ui_msg: calling whiptail --msgbox height=$height width=$width message_len=${#message}"
+        local rc=0
+        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" || rc=$?
+        dbg "ui_msg: whiptail --msgbox returned rc=$rc"
+        return "$rc"
     fi
 
     echo "== $title ==" >&2
@@ -167,11 +173,12 @@ pick_proton_version() {
     local choice
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         dbg "pick_proton_version: calling whiptail --menu"
+        local rc=0
         choice=$(whiptail --backtitle "$BACKTITLE" --title "Choose a Proton version" \
             --default-item "$DEFAULT_PROTON_VERSION" \
             --menu "Recommended: $DEFAULT_PROTON_VERSION" 20 78 10 \
-            "${menu_args[@]}" 3>&1 1>&2 2>&3)
-        dbg "pick_proton_version: whiptail --menu returned choice=[$choice]"
+            "${menu_args[@]}" 3>&1 1>&2 2>&3) || rc=$?
+        dbg "pick_proton_version: whiptail --menu returned rc=$rc choice=[$choice]"
     else
         choice=$(ui_menu "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${menu_args[@]}")
     fi
