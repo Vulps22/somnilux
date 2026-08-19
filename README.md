@@ -18,6 +18,27 @@ Everything here is a patch to Wine itself, free and open source software
 (LGPL-2.1), fixing genuine Wine compatibility bugs that this app happens
 to trigger.
 
+## Requirements
+
+- `curl`, `tar`, and `python3` 3.10 or newer — the script checks for these
+  before it does anything and tells you if something's missing.
+- A GPU driver and OpenXR runtime you can already run other VR titles with.
+
+You do **not** need Steam, Lutris, Heroic, or a system-wide
+[umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)
+install. Somnilux downloads its own private copy of `umu-run` into
+`~/.local/share/somnilux/`, so it doesn't depend on your distribution
+packaging one.
+
+`whiptail` is optional but recommended — the script falls back to plain text
+prompts without it, but the guided TUI is nicer (and better tested):
+
+```sh
+sudo apt install whiptail    # Debian/Ubuntu/Mint
+sudo dnf install newt        # Fedora/Nobara (provides whiptail)
+sudo pacman -S libnewt       # Arch (provides whiptail)
+```
+
 ## Quick start
 
 Download and run the latest release:
@@ -30,17 +51,25 @@ chmod +x install.sh
 
 It'll walk you through installing fresh, or repairing an existing setup.
 
-For the best experience, make sure `whiptail` is installed — the script
-falls back to plain text prompts without it, but the guided TUI is nicer (and tested):
-
-```sh
-sudo apt install whiptail    # Debian/Ubuntu
-sudo dnf install newt        # Fedora/Nobara (provides whiptail)
-```
+> Download the script and run it as a file, as above. Don't pipe it straight
+> into a shell (`curl ... | bash`) — that consumes standard input, and the
+> installer needs it to ask you questions.
 
 This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
+
+## If the shortcut doesn't seem to do anything
+
+The applications-menu shortcut writes everything the launcher prints to:
+
+```
+~/.local/share/somnilux/launch.log
+```
+
+That's the first place to look, and the most useful thing to attach to a
+bug report. The installer itself keeps a separate debug log, whose path it
+prints if it fails.
 
 ## Tested with
 
@@ -64,10 +93,13 @@ Discord (`@vulps22`) and let me know — good or bad, it all helps.
   source" obligation for the prebuilt binaries below is satisfied: the
   unmodified base is already public (`wine-mirror/wine` /
   `gitlab.winehq.org/wine/wine`), and our diff on top of it is here.
-- `scripts/install.sh` — the setup script: downloads a GE-Proton release,
-  downloads this project's prebuilt patched `secur32`/`crypt32`/`rsaenh`,
-  and wires up a working prefix. Handles both a fresh install and
-  repairing an existing one.
+- `scripts/install.sh` — the setup script: downloads a GE-Proton release and
+  its own copy of `umu-run`, downloads this project's prebuilt patched
+  `secur32`/`crypt32`/`rsaenh`, and wires up a working prefix. Handles both
+  a fresh install and repairing an existing one.
+- `supported/` — the Proton and Wine versions this project recommends,
+  fetched by `install.sh` at run time so updates don't require a new script
+  release.
 
 ## License
 
