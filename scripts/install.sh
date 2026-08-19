@@ -705,17 +705,24 @@ create_desktop_entry() {
 
     mkdir -p "$apps_dir"
 
-    if [ -f "$source_icon" ] && command -v magick >/dev/null 2>&1; then
+    local convert_cmd=""
+    if command -v magick >/dev/null 2>&1; then
+        convert_cmd="magick"
+    elif command -v convert >/dev/null 2>&1; then
+        convert_cmd="convert"
+    fi
+
+    if [ -f "$source_icon" ] && [ -n "$convert_cmd" ]; then
         mkdir -p "$ICON_DEST_DIR"
-        dbg "create_desktop_entry: converting icon $source_icon"
-        if magick "$source_icon[0]" "$ICON_DEST_DIR/somnium-space.png" 2>>"$DEBUG_LOG"; then
+        dbg "create_desktop_entry: converting icon $source_icon with $convert_cmd"
+        if "$convert_cmd" "$source_icon[0]" "$ICON_DEST_DIR/somnium-space.png" 2>>"$DEBUG_LOG"; then
             icon_line="Icon=$ICON_DEST_DIR/somnium-space.png"
             dbg "create_desktop_entry: icon converted OK"
         else
             dbg "create_desktop_entry: icon conversion FAILED, continuing without one"
         fi
     else
-        dbg "create_desktop_entry: no source icon or no magick, continuing without one"
+        dbg "create_desktop_entry: no source icon or no ImageMagick, continuing without one"
     fi
 
     cat > "$desktop_file" <<EOF
