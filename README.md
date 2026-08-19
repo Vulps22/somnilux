@@ -90,7 +90,7 @@ Somnilux has been tested on the following Linux distributions:
 | Bazzite | ⚠️ | Untested |
 | Debian | ⚠️ | Untested |
 | Fedora | ⚠️ | Untested |
-| Linux Mint | ⚠️ | Untested |
+| Linux Mint | ✅ | |
 | Manjaro | ⚠️ | Untested |
 | Nobara 44 | ✅ | |
 | openSUSE | ⚠️ | Untested |
