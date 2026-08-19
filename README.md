@@ -1,19 +1,34 @@
 # Somnilux
 
+**Somnium Space on Linux — without Steam, without guesswork.**
+
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+![Platform: Linux](https://img.shields.io/badge/platform-Linux-informational)
+![Somnium Space](https://img.shields.io/badge/Somnium%20Space-3.2.5-success)
+
 Wine/Proton patches and setup tooling for running [Somnium Space](https://somniumspace.com)
-on Linux independent of Steam.
+on Linux, in the absence of an official Linux-native client (currently in
+closed beta, per Somnium staff).
 
 **Not affiliated with Somnium Space Ltd, the Wine project, or WineHQ.**
-This project does not distribute, modify, or redistribute any of Somnium's
-own client/launcher binaries — you must download Somnium's official installer yourself, which Somnilux will start automatically when the environment is ready.
-Everything here is a patch to Wine, which is free and
-open source software (LGPL-2.1), aimed at fixing genuine Wine compatibility
-bugs that this app happens to trigger.
+This project never distributes, modifies, or redistributes any of Somnium's
+own client/launcher binaries. You supply your own copy of Somnium's official
+installer; Somnilux launches it for you once the environment is ready.
+Everything here is a patch to Wine itself, free and open source software
+(LGPL-2.1), fixing genuine Wine compatibility bugs that this app happens
+to trigger.
 
-## Status
+## Quick start
 
-Working. Run `scripts/install.sh` to install or repair a Somnium Space
-setup on Linux.
+Download and run the latest release:
+
+```sh
+curl -LO https://github.com/Vulps22/somnilux/releases/latest/download/install.sh
+chmod +x install.sh
+./install.sh
+```
+
+It'll walk you through installing fresh, or repairing an existing setup.
 
 This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
