@@ -295,6 +295,34 @@ create_prefix_and_run_installer() {
     run_in_prefix "$proton_dir" "$prefix_path" "$installer_path"
 }
 
+# create_desktop_entry prefix_path proton_dir
+create_desktop_entry() {
+    local prefix_path="$1" proton_dir="$2"
+    local apps_dir="$HOME/.local/share/applications"
+    local desktop_file="$apps_dir/somnium-space.desktop"
+    local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
+
+    mkdir -p "$apps_dir"
+
+    cat > "$desktop_file" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Somnium Space
+Comment=Somnium Space VR, via somnilux
+Exec=env PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID=umu-somnium umu-run "$launcher_path"
+Terminal=false
+Categories=Game;
+EOF
+
+    chmod +x "$desktop_file"
+
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+    fi
+
+    echo "Created desktop entry: $desktop_file"
+}
+
 main() {
     local mode
     mode=$(main_menu)
