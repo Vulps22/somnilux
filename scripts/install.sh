@@ -20,6 +20,7 @@ ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
 UMU_VERSION="1.4.4"
+UMU_SHA256="eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"
 UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/releases/download"
 UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
@@ -466,6 +467,16 @@ download_umu() {
         exit 1
     fi
     dbg "download_umu: curl done"
+
+    echo "Verifying checksum..."
+    dbg "download_umu: sha256 verify starting"
+    if ! printf '%s  %s\n' "$UMU_SHA256" "$workdir/umu.tar" | sha256sum -c - >/dev/null 2>&1; then
+        dbg "download_umu: sha256 verify FAILED, got [$(sha256sum "$workdir/umu.tar" 2>/dev/null | cut -d' ' -f1)]"
+        rm -rf "$workdir"
+        ui_msg "Error" "Checksum verification failed for umu-run $version. The download may be corrupt."
+        exit 1
+    fi
+    dbg "download_umu: sha256 verify OK"
 
     echo "Extracting..."
     if ! tar -xf "$workdir/umu.tar" -C "$workdir"; then
