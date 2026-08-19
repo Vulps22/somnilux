@@ -60,3 +60,9 @@ The setup scripts and this documentation are MIT-licensed (see `LICENSE`).
 The patches in `patches/`, being modifications to Wine, are licensed under
 Wine's own license, LGPL-2.1 (see
 <https://gitlab.winehq.org/wine/wine/-/raw/master/LICENSE>).
+
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind. Use at
+your own risk — the author accepts no responsibility for any damage, data
+loss, or other consequences resulting from running this script.
