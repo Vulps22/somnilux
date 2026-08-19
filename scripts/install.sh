@@ -276,8 +276,27 @@ repair_flow() {
 
     dbg "repair_flow: not found at default, showing msg"
     ui_msg "Not found" "No Somnium install found at the default location ($DEFAULT_PREFIX)."
-    dbg "repair_flow: asking for manual path"
-    ui_input __rf_out "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+
+    local __rf_path
+    while true; do
+        dbg "repair_flow: asking for manual path"
+        ui_input __rf_path "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+        expand_path __rf_path "$__rf_path"
+        dbg "repair_flow: got path=[$__rf_path]"
+
+        if [ -n "$__rf_path" ] && [ -f "$__rf_path/$LAUNCHER_REL_PATH" ]; then
+            break
+        fi
+
+        dbg "repair_flow: path invalid, re-prompting"
+        ui_msg "Not a Somnium prefix" "Couldn't find the Somnium Space Launcher inside:
+
+  ${__rf_path:-(nothing entered)}
+
+Expected it at <prefix>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
+    done
+
+    __rf_out="$__rf_path"
     dbg "repair_flow: exit prefix=[$__rf_out]"
 }
 
