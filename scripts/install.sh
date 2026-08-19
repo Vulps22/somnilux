@@ -126,7 +126,9 @@ ui_yesno() {
 }
 
 # ui_msg title message [height] [width]
-# No output value, so no nameref needed.
+# No output value, so no nameref needed. Always succeeds: dismissing an
+# informational box isn't a choice, and under set -e any non-zero return
+# from here would abort the whole script.
 ui_msg() {
     dbg "ui_msg: enter title=[$1]"
     local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
@@ -137,12 +139,13 @@ ui_msg() {
         local rc=0
         whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" 1>&2 || rc=$?
         dbg "ui_msg: whiptail --msgbox returned rc=$rc"
-        return "$rc"
+        return 0
     fi
 
     echo "== $title ==" >&2
     echo "$message" >&2
-    read -r -p "Press Enter to continue..." _
+    read -r -p "Press Enter to continue..." _ || true
+    return 0
 }
 
 MIN_PYTHON_VERSION="3.10"
