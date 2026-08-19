@@ -170,16 +170,49 @@ repair_flow() {
     echo "$prefix"
 }
 
+# Expands a leading ~ to $HOME. Echoes the result to stdout.
+expand_path() {
+    local path="$1"
+    echo "${path/#\~/$HOME}"
+}
+
+# Echoes "installer_path|prefix_path|proton_version|proton_dir" to stdout.
+install_flow() {
+    local installer_path prefix_path proton_version proton_dir
+
+    installer_path=$(ui_input "Somnium installer" "Enter the path to the Somnium Space installer (.exe)" "")
+    installer_path=$(expand_path "$installer_path")
+    if [ ! -f "$installer_path" ]; then
+        ui_msg "Error" "No file found at: $installer_path"
+        exit 1
+    fi
+
+    prefix_path=$(ui_input "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX")
+    prefix_path=$(expand_path "$prefix_path")
+
+    fetch_supported_versions
+    proton_version=$(pick_proton_version)
+
+    proton_dir="$(dirname "$prefix_path")/${proton_version}-somnilux"
+
+    echo "$installer_path|$prefix_path|$proton_version|$proton_dir"
+}
+
 main() {
     local mode
     mode=$(main_menu)
 
     case "$mode" in
         install)
-            fetch_supported_versions
-            local chosen
-            chosen=$(pick_proton_version)
-            ui_msg "Result" "Install flow not yet implemented. Would install with: $chosen"
+            local result installer_path prefix_path proton_version proton_dir
+            result=$(install_flow)
+            IFS='|' read -r installer_path prefix_path proton_version proton_dir <<< "$result"
+            ui_msg "Result" "Install flow not fully implemented yet.
+
+Installer: $installer_path
+Prefix: $prefix_path
+Proton version: $proton_version
+Proton dir: $proton_dir"
             ;;
         repair)
             local prefix
