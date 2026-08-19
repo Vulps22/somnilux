@@ -1,6 +1,6 @@
 # Somnilux
 
-**Somnium Space on Linux — without Steam, without guesswork.**
+**Somnium Space on Linux**
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Platform: Linux](https://img.shields.io/badge/platform-Linux-informational)
