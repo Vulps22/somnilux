@@ -2,8 +2,10 @@
 set -euo pipefail
 trap 'stty sane 2>/dev/null || true; tput rmcup 2>/dev/null || true' EXIT
 
-DEBUG_LOG="/tmp/somnilux-debug.log"
-: > "$DEBUG_LOG"
+DEBUG_LOG="${XDG_RUNTIME_DIR:-/tmp}/somnilux-$(id -u)-debug.log"
+if ! : > "$DEBUG_LOG" 2>/dev/null; then
+    DEBUG_LOG=$(mktemp -t somnilux-debug.XXXXXX)
+fi
 DEBUG_N=0
 dbg() {
     DEBUG_N=$((DEBUG_N + 1))
@@ -693,7 +695,7 @@ setup_proton_and_dlls() {
             local error_text
             error_text=$(cat "$error_file")
             if [ -z "$error_text" ]; then
-                error_text="Setting up Proton failed. See /tmp/somnilux-debug.log for details."
+                error_text="Setting up Proton failed. See $DEBUG_LOG for details."
             fi
             ui_msg "Error" "$error_text"
             rm -f "$error_file"
