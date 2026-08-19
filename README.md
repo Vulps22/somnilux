@@ -22,25 +22,10 @@ release of this script is available.
 
 ## What's fixed
 
-Two independent Wine bugs, both hit by Somnium's Launcher/Game Service
-during their local mutual-TLS handshake and certificate handling under
-Wine/Proton:
-
-1. **`crypt32`: unrecognized certificate OIDs formatted wrong.**
-   `CertNameToStrW` renders an RDN attribute OID with no registered
-   friendly name as the bare dotted-decimal number; real Windows prefixes
-   it with `OID.`. Apps that derive values (e.g. a cipher key) from a
-   certificate's `Subject`/`Issuer` string get a different value than on
-   real Windows whenever the certificate contains an OID Wine doesn't
-   recognize by name.
-2. **`secur32`/SChannel: no support for the SSPI pause-and-retry contract
-   .NET uses for anonymous-start mutual TLS**, plus a related missing
-   `SECPKG_ATTR_ISSUER_LIST_EX` implementation that meant a client could
-   never learn which CAs a server would accept, and so could never select
-   a certificate to send. Three patches: requesting/detecting the need for
-   a client cert, the async pause/resume mechanism itself, and the
-   `SECPKG_ATTR_ISSUER_LIST_EX` implementation — see each patch's own commit
-   message for details.
+- Fixed `CertNameToStrW` not prefixing unrecognized certificate OIDs with `OID.` (crypt32)
+- Added client-certificate requests over local mutual-TLS connections (secur32)
+- Added async pause/resume support so a client can respond to a certificate request mid-handshake (secur32)
+- Implemented `SECPKG_ATTR_ISSUER_LIST_EX` so a client can actually select which certificate to send (secur32)
 
 ## Layout
 
