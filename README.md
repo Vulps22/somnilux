@@ -71,12 +71,34 @@ That's the first place to look, and the most useful thing to attach to a
 bug report. The installer itself keeps a separate debug log, whose path it
 prints if it fails.
 
-## Tested with
+## Tested distributions
 
-So far this has only been tested against **SteamVR** as the OpenXR runtime.
-If you've got it working on something else (Monado, WiVRn, etc.), please
+Somnilux has been tested on the following Linux distributions:
+
+| Distribution | Stable | Notes |
+| --- | --- | --- |
+| Nobara 44 (Fedora) | ✅ | Primary development and testing machine. |
+
+## Tested OpenXR runtimes
+
+Somnium Space has been confirmed to run with the following OpenXR runtimes:
+
+| Runtime | Stable | Headsets | Notes |
+| --- | --- | --- | --- |
+| SteamVR | ✅ | Quest 3 (via Steam Link) | Runs almost flawlessly. |
+
+Anything not listed simply hasn't been tried yet, rather than being known
+broken. If you get Somnilux working on another distribution, runtime or
+headset — or find one of the above doesn't hold up — please
 [open an issue](https://github.com/Vulps22/somnilux/issues) or ping me on
-Discord (`@vulps22`) and let me know — good or bad, it all helps.
+Discord (`@vulps22`). Good or bad, it all helps, and the tables above only
+grow from reports.
+
+## Known issues
+
+- **Viewing your desktop from inside Somnium Space can crash the client**
+  on some distributions.
+- **The social app doesn't work in the launcher.**
 
 ## What's fixed
 
