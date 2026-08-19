@@ -5,6 +5,7 @@ BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
 DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
+DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
 
 HAVE_WHIPTAIL=0
 if command -v whiptail >/dev/null 2>&1; then
@@ -246,6 +247,36 @@ download_proton() {
 
     mv "$workdir/$version-x86_64" "$dest"
     rm -rf "$workdir"
+}
+
+# install_patched_dlls proton_dir
+# Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
+install_patched_dlls() {
+    local proton_dir="$1"
+    local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
+    local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
+    local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
+    local f
+
+    echo "Installing patched DLLs (Wine $DEFAULT_WINE_VERSION build)..."
+
+    for f in secur32.so crypt32.so; do
+        [ -f "$dest_unix/$f.orig" ] || cp -a "$dest_unix/$f" "$dest_unix/$f.orig"
+        chmod u+w "$dest_unix/$f"
+        if ! curl -fsSL -o "$dest_unix/$f" "$release_url/$f"; then
+            ui_msg "Error" "Failed to download $f from the somnilux release."
+            exit 1
+        fi
+    done
+
+    for f in secur32.dll crypt32.dll rsaenh.dll; do
+        [ -f "$dest_win/$f.orig" ] || cp -a "$dest_win/$f" "$dest_win/$f.orig"
+        chmod u+w "$dest_win/$f"
+        if ! curl -fsSL -o "$dest_win/$f" "$release_url/$f"; then
+            ui_msg "Error" "Failed to download $f from the somnilux release."
+            exit 1
+        fi
+    done
 }
 
 main() {
