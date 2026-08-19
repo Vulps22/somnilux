@@ -503,25 +503,48 @@ install_patched_dlls() {
     local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
     local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
     local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
-    local f
+    local all_files=(secur32.so crypt32.so secur32.dll crypt32.dll rsaenh.dll)
+    local workdir f dest_dir
+    workdir=$(mktemp -d)
 
     echo "Installing patched DLLs (Wine $DEFAULT_WINE_VERSION build)..."
 
-    for f in secur32.so crypt32.so; do
-        dbg "install_patched_dlls: unix file $f starting"
-        [ -f "$dest_unix/$f.orig" ] || cp -a "$dest_unix/$f" "$dest_unix/$f.orig"
-        chmod u+w "$dest_unix/$f"
-        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_unix/$f" "$release_url/$f" || { dbg "install_patched_dlls: $f FAILED"; return 1; }
-        dbg "install_patched_dlls: unix file $f done"
+    for f in "${all_files[@]}"; do
+        dbg "install_patched_dlls: downloading $f"
+        if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$f" "$release_url/$f"; then
+            dbg "install_patched_dlls: download of $f FAILED"
+            rm -rf "$workdir"
+            return 1
+        fi
+        if [ ! -s "$workdir/$f" ]; then
+            dbg "install_patched_dlls: $f downloaded empty"
+            rm -rf "$workdir"
+            return 1
+        fi
     done
 
-    for f in secur32.dll crypt32.dll rsaenh.dll; do
-        dbg "install_patched_dlls: windows file $f starting"
-        [ -f "$dest_win/$f.orig" ] || cp -a "$dest_win/$f" "$dest_win/$f.orig"
-        chmod u+w "$dest_win/$f"
-        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_win/$f" "$release_url/$f" || { dbg "install_patched_dlls: $f FAILED"; return 1; }
-        dbg "install_patched_dlls: windows file $f done"
+    for f in "${all_files[@]}"; do
+        case "$f" in
+            *.so) dest_dir="$dest_unix" ;;
+            *)    dest_dir="$dest_win" ;;
+        esac
+        if [ ! -f "$dest_dir/$f" ]; then
+            dbg "install_patched_dlls: expected $dest_dir/$f is missing"
+            rm -rf "$workdir"
+            return 1
+        fi
+        if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
+            dbg "install_patched_dlls: backup of $f FAILED"
+            rm -rf "$workdir"
+            return 1
+        fi
+        chmod u+w "$dest_dir/$f"
+        mv "$workdir/$f" "$dest_dir/$f"
+        chmod 0644 "$dest_dir/$f"
+        dbg "install_patched_dlls: installed $f"
     done
+
+    rm -rf "$workdir"
     dbg "install_patched_dlls: exit success"
 }
 
