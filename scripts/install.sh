@@ -16,6 +16,8 @@ CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
 SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
 DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
+ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
+ICON_DEST_DIR="$HOME/.local/share/somnilux"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
 
 dbg "top-level: checking for whiptail"
@@ -604,8 +606,23 @@ create_desktop_entry() {
     local apps_dir="$HOME/.local/share/applications"
     local desktop_file="$apps_dir/somnium-space.desktop"
     local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
+    local source_icon="$prefix_path/$ICON_REL_PATH"
+    local icon_line=""
 
     mkdir -p "$apps_dir"
+
+    if [ -f "$source_icon" ] && command -v magick >/dev/null 2>&1; then
+        mkdir -p "$ICON_DEST_DIR"
+        dbg "create_desktop_entry: converting icon $source_icon"
+        if magick "$source_icon[0]" "$ICON_DEST_DIR/somnium-space.png" 2>>"$DEBUG_LOG"; then
+            icon_line="Icon=$ICON_DEST_DIR/somnium-space.png"
+            dbg "create_desktop_entry: icon converted OK"
+        else
+            dbg "create_desktop_entry: icon conversion FAILED, continuing without one"
+        fi
+    else
+        dbg "create_desktop_entry: no source icon or no magick, continuing without one"
+    fi
 
     cat > "$desktop_file" <<EOF
 [Desktop Entry]
@@ -615,6 +632,7 @@ Comment=Somnium Space VR, via somnilux
 Exec=env PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID=umu-somnium umu-run "$launcher_path"
 Terminal=false
 Categories=Game;
+$icon_line
 EOF
 
     chmod +x "$desktop_file"
