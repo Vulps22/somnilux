@@ -30,6 +30,14 @@ chmod +x install.sh
 
 It'll walk you through installing fresh, or repairing an existing setup.
 
+For the best experience, make sure `whiptail` is installed — the script
+falls back to plain text prompts without it, but the guided TUI is nicer (and tested):
+
+```sh
+sudo apt install whiptail    # Debian/Ubuntu
+sudo dnf install newt        # Fedora/Nobara (provides whiptail)
+```
+
 This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
