@@ -293,7 +293,7 @@ find_proton_dir_for_prefix() {
     local -n __fp_out="$1"
     local __fp_prefix_path="$2"
     dbg "find_proton_dir_for_prefix: enter prefix_path=[$__fp_prefix_path]"
-    local __fp_parent __fp_candidates=() __fp_version
+    local __fp_parent __fp_candidates=() __fp_candidate __fp_version
 
     __fp_parent=$(dirname "$__fp_prefix_path")
     dbg "find_proton_dir_for_prefix: searching in parent=[$__fp_parent]"
