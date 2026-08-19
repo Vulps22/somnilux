@@ -836,6 +836,11 @@ main() {
             ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: repair branch done"
             ;;
+        *)
+            dbg "main: unexpected mode=[$mode], aborting"
+            ui_msg "Error" "Unexpected choice: '$mode'. Nothing has been changed."
+            exit 1
+            ;;
     esac
     dbg "main: exit"
 }
