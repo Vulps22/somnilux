@@ -19,6 +19,7 @@ LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.ex
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
+UMU_VERSION="1.4.4"
 UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/releases/download"
 UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
@@ -143,11 +144,10 @@ ui_msg() {
     read -r -p "Press Enter to continue..." _
 }
 
-# Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION,
-# DEFAULT_UMU_VERSION.
+# Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
-    local proton_txt default_txt umu_txt
+    local proton_txt default_txt
 
     dbg "fetch_supported_versions: curl proton.txt starting"
     if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
@@ -165,19 +165,10 @@ fetch_supported_versions() {
     fi
     dbg "fetch_supported_versions: curl default.txt done, got [$default_txt]"
 
-    dbg "fetch_supported_versions: curl umu.txt starting"
-    if ! umu_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/umu.txt"); then
-        dbg "fetch_supported_versions: curl umu.txt FAILED"
-        ui_msg "Error" "Could not fetch the supported umu-launcher version from GitHub. Check your internet connection."
-        exit 1
-    fi
-    dbg "fetch_supported_versions: curl umu.txt done, got [$umu_txt]"
-
     mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
     DEFAULT_PROTON_VERSION=$(sed -n '1p' <<< "$default_txt")
     DEFAULT_WINE_VERSION=$(sed -n '2p' <<< "$default_txt")
-    DEFAULT_UMU_VERSION=$(sed -n '1p' <<< "$umu_txt")
-    dbg "fetch_supported_versions: exit DEFAULT_PROTON_VERSION=$DEFAULT_PROTON_VERSION DEFAULT_WINE_VERSION=$DEFAULT_WINE_VERSION DEFAULT_UMU_VERSION=$DEFAULT_UMU_VERSION"
+    dbg "fetch_supported_versions: exit DEFAULT_PROTON_VERSION=$DEFAULT_PROTON_VERSION DEFAULT_WINE_VERSION=$DEFAULT_WINE_VERSION"
 }
 
 # pick_proton_version outvar
@@ -720,7 +711,7 @@ main() {
             dbg "main: install_flow returned installer_path=[$installer_path] prefix_path=[$prefix_path] proton_version=[$proton_version] proton_dir=[$proton_dir]"
 
             dbg "main: calling download_umu"
-            download_umu "$DEFAULT_UMU_VERSION"
+            download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_prefix_and_run_installer"
@@ -745,7 +736,7 @@ main() {
             dbg "main: derived proton_version=[$proton_version]"
 
             dbg "main: calling download_umu"
-            download_umu "$DEFAULT_UMU_VERSION"
+            download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_desktop_entry"
