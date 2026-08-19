@@ -2,8 +2,10 @@
 set -euo pipefail
 trap 'stty sane 2>/dev/null || true; tput rmcup 2>/dev/null || true' EXIT
 
-DEBUG_LOG="/tmp/somnilux-debug.log"
-: > "$DEBUG_LOG"
+DEBUG_LOG="${XDG_RUNTIME_DIR:-/tmp}/somnilux-$(id -u)-debug.log"
+if ! : > "$DEBUG_LOG" 2>/dev/null; then
+    DEBUG_LOG=$(mktemp -t somnilux-debug.XXXXXX)
+fi
 DEBUG_N=0
 dbg() {
     DEBUG_N=$((DEBUG_N + 1))
@@ -19,6 +21,13 @@ LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.ex
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
+UMU_VERSION="1.4.4"
+UMU_SHA256="eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"
+UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/releases/download"
+UMU_DEST="$HOME/.local/share/somnilux/umu"
+UMU_RUN_BIN="$UMU_DEST/umu-run"
+UMU_VERSION_STAMP="$UMU_DEST/version"
+MIN_PYTHON_VERSION="3.10"
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -97,31 +106,10 @@ ui_input() {
     dbg "ui_input: fallback got value=[$__ui_out]"
 }
 
-# ui_yesno title prompt
-# Returns 0 for yes, 1 for no. No output value, so no nameref needed.
-ui_yesno() {
-    dbg "ui_yesno: enter title=[$1]"
-    local title="$1" prompt="$2"
-
-    if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
-        sleep 0.2
-        local rc=0
-        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 1>&2 || rc=$?
-        dbg "ui_yesno: whiptail --yesno returned rc=$rc"
-        return "$rc"
-    fi
-
-    echo "== $title ==" >&2
-    local value
-    read -r -p "$prompt [y/N]: " value
-    case "$value" in
-        [Yy]*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 # ui_msg title message [height] [width]
-# No output value, so no nameref needed.
+# No output value, so no nameref needed. Always succeeds: dismissing an
+# informational box isn't a choice, and under set -e any non-zero return
+# from here would abort the whole script.
 ui_msg() {
     dbg "ui_msg: enter title=[$1]"
     local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
@@ -132,12 +120,49 @@ ui_msg() {
         local rc=0
         whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" 1>&2 || rc=$?
         dbg "ui_msg: whiptail --msgbox returned rc=$rc"
-        return "$rc"
+        return 0
     fi
 
     echo "== $title ==" >&2
     echo "$message" >&2
-    read -r -p "Press Enter to continue..." _
+    read -r -p "Press Enter to continue..." _ || true
+    return 0
+}
+
+# Checks for the tools we can't work without. whiptail is deliberately not
+# included -- there's a plain-text fallback for it. python3 is needed by the
+# vendored umu-run, so a missing or too-old one only shows up as a launcher
+# that silently does nothing, long after this script has finished.
+check_dependencies() {
+    dbg "check_dependencies: enter"
+    local missing=() cmd
+
+    for cmd in curl tar python3; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
+    done
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        dbg "check_dependencies: missing=[${missing[*]}]"
+        ui_msg "Missing dependencies" "This script needs the following, which aren't installed:
+
+  ${missing[*]}
+
+Install them with your distribution's package manager and run this again."
+        exit 1
+    fi
+
+    if ! python3 -c "import sys; want = tuple(int(p) for p in '$MIN_PYTHON_VERSION'.split('.')); sys.exit(0 if sys.version_info[:len(want)] >= want else 1)" 2>/dev/null; then
+        local python_version
+        python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null || echo "unknown")
+        dbg "check_dependencies: python3 too old, got [$python_version]"
+        ui_msg "Python too old" "umu-run needs Python $MIN_PYTHON_VERSION or newer, but python3 here is $python_version.
+
+Somnium Space would install but the launcher would silently fail to start. Please update Python and run this again."
+        exit 1
+    fi
+    dbg "check_dependencies: exit, all present"
 }
 
 # Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
@@ -234,8 +259,27 @@ repair_flow() {
 
     dbg "repair_flow: not found at default, showing msg"
     ui_msg "Not found" "No Somnium install found at the default location ($DEFAULT_PREFIX)."
-    dbg "repair_flow: asking for manual path"
-    ui_input __rf_out "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+
+    local __rf_path
+    while true; do
+        dbg "repair_flow: asking for manual path"
+        ui_input __rf_path "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+        expand_path __rf_path "$__rf_path"
+        dbg "repair_flow: got path=[$__rf_path]"
+
+        if [ -n "$__rf_path" ] && [ -f "$__rf_path/$LAUNCHER_REL_PATH" ]; then
+            break
+        fi
+
+        dbg "repair_flow: path invalid, re-prompting"
+        ui_msg "Not a Somnium prefix" "Couldn't find the Somnium Space Launcher inside:
+
+  ${__rf_path:-(nothing entered)}
+
+Expected it at <prefix>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
+    done
+
+    __rf_out="$__rf_path"
     dbg "repair_flow: exit prefix=[$__rf_out]"
 }
 
@@ -249,7 +293,7 @@ find_proton_dir_for_prefix() {
     local -n __fp_out="$1"
     local __fp_prefix_path="$2"
     dbg "find_proton_dir_for_prefix: enter prefix_path=[$__fp_prefix_path]"
-    local __fp_parent __fp_candidates=() __fp_version
+    local __fp_parent __fp_candidates=() __fp_candidate __fp_version
 
     __fp_parent=$(dirname "$__fp_prefix_path")
     dbg "find_proton_dir_for_prefix: searching in parent=[$__fp_parent]"
@@ -372,6 +416,63 @@ download_proton() {
     dbg "download_proton: exit, moved to dest"
 }
 
+# download_umu version
+# Downloads and vendors our own private copy of umu-run (the umu-launcher
+# zipapp release) into UMU_DEST, so launching never depends on a system
+# package or PATH -- only python3, which is effectively universal. No-ops
+# if the requested version is already vendored.
+download_umu() {
+    dbg "download_umu: enter version=[$1]"
+    local version="$1"
+
+    if [ -x "$UMU_RUN_BIN" ] && [ "$(cat "$UMU_VERSION_STAMP" 2>/dev/null)" = "$version" ]; then
+        dbg "download_umu: version $version already vendored, skipping"
+        echo "umu-run $version already present, skipping download."
+        return
+    fi
+    dbg "download_umu: not vendored at version $version, (re)downloading"
+
+    local url="$UMU_RELEASE_BASE_URL/$version/umu-launcher-$version-zipapp.tar"
+    local workdir
+    workdir=$(mktemp -d)
+    dbg "download_umu: workdir=[$workdir] url=[$url]"
+
+    echo "Downloading umu-run $version..."
+    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$workdir/umu.tar" "$url"; then
+        dbg "download_umu: curl FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to download umu-run $version. Check your internet connection."
+        exit 1
+    fi
+    dbg "download_umu: curl done"
+
+    echo "Verifying checksum..."
+    dbg "download_umu: sha256 verify starting"
+    if ! printf '%s  %s\n' "$UMU_SHA256" "$workdir/umu.tar" | sha256sum -c - >/dev/null 2>&1; then
+        dbg "download_umu: sha256 verify FAILED, got [$(sha256sum "$workdir/umu.tar" 2>/dev/null | cut -d' ' -f1)]"
+        rm -rf "$workdir"
+        ui_msg "Error" "Checksum verification failed for umu-run $version. The download may be corrupt."
+        exit 1
+    fi
+    dbg "download_umu: sha256 verify OK"
+
+    echo "Extracting..."
+    if ! tar -xf "$workdir/umu.tar" -C "$workdir"; then
+        dbg "download_umu: tar FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to extract umu-run $version."
+        exit 1
+    fi
+    dbg "download_umu: tar done"
+
+    mkdir -p "$UMU_DEST"
+    mv "$workdir/umu/umu-run" "$UMU_RUN_BIN"
+    chmod +x "$UMU_RUN_BIN"
+    printf '%s\n' "$version" > "$UMU_VERSION_STAMP"
+    rm -rf "$workdir"
+    dbg "download_umu: exit, vendored to $UMU_RUN_BIN"
+}
+
 # install_patched_dlls proton_dir
 # Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
 install_patched_dlls() {
@@ -380,25 +481,48 @@ install_patched_dlls() {
     local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
     local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
     local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
-    local f
+    local all_files=(secur32.so crypt32.so secur32.dll crypt32.dll rsaenh.dll)
+    local workdir f dest_dir
+    workdir=$(mktemp -d)
 
     echo "Installing patched DLLs (Wine $DEFAULT_WINE_VERSION build)..."
 
-    for f in secur32.so crypt32.so; do
-        dbg "install_patched_dlls: unix file $f starting"
-        [ -f "$dest_unix/$f.orig" ] || cp -a "$dest_unix/$f" "$dest_unix/$f.orig"
-        chmod u+w "$dest_unix/$f"
-        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_unix/$f" "$release_url/$f" || { dbg "install_patched_dlls: $f FAILED"; return 1; }
-        dbg "install_patched_dlls: unix file $f done"
+    for f in "${all_files[@]}"; do
+        dbg "install_patched_dlls: downloading $f"
+        if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$f" "$release_url/$f"; then
+            dbg "install_patched_dlls: download of $f FAILED"
+            rm -rf "$workdir"
+            return 1
+        fi
+        if [ ! -s "$workdir/$f" ]; then
+            dbg "install_patched_dlls: $f downloaded empty"
+            rm -rf "$workdir"
+            return 1
+        fi
     done
 
-    for f in secur32.dll crypt32.dll rsaenh.dll; do
-        dbg "install_patched_dlls: windows file $f starting"
-        [ -f "$dest_win/$f.orig" ] || cp -a "$dest_win/$f" "$dest_win/$f.orig"
-        chmod u+w "$dest_win/$f"
-        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_win/$f" "$release_url/$f" || { dbg "install_patched_dlls: $f FAILED"; return 1; }
-        dbg "install_patched_dlls: windows file $f done"
+    for f in "${all_files[@]}"; do
+        case "$f" in
+            *.so) dest_dir="$dest_unix" ;;
+            *)    dest_dir="$dest_win" ;;
+        esac
+        if [ ! -f "$dest_dir/$f" ]; then
+            dbg "install_patched_dlls: expected $dest_dir/$f is missing"
+            rm -rf "$workdir"
+            return 1
+        fi
+        if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
+            dbg "install_patched_dlls: backup of $f FAILED"
+            rm -rf "$workdir"
+            return 1
+        fi
+        chmod u+w "$dest_dir/$f"
+        mv "$workdir/$f" "$dest_dir/$f"
+        chmod 0644 "$dest_dir/$f"
+        dbg "install_patched_dlls: installed $f"
     done
+
+    rm -rf "$workdir"
     dbg "install_patched_dlls: exit success"
 }
 
@@ -524,9 +648,10 @@ run_gauged_pipeline() {
         gauge_step 100 "Done."
         dbg "run_gauged_pipeline(subshell): reached end of piped block"
     } | whiptail --backtitle "$BACKTITLE" --title "Setting up Somnium Space" --gauge "Starting..." 10 78 0
+    local pipe_status=("${PIPESTATUS[@]}")
 
-    dbg "run_gauged_pipeline: whiptail --gauge pipeline returned, PIPESTATUS=${PIPESTATUS[*]}"
-    return "${PIPESTATUS[0]}"
+    dbg "run_gauged_pipeline: whiptail --gauge pipeline returned, PIPESTATUS=${pipe_status[*]}"
+    return "${pipe_status[0]}"
 }
 
 # setup_proton_and_dlls proton_version proton_dir
@@ -543,7 +668,12 @@ setup_proton_and_dlls() {
         dbg "setup_proton_and_dlls: calling run_gauged_pipeline, error_file=[$error_file]"
         if ! run_gauged_pipeline "$version" "$dest" "$error_file"; then
             dbg "setup_proton_and_dlls: run_gauged_pipeline FAILED, showing error"
-            ui_msg "Error" "$(cat "$error_file")"
+            local error_text
+            error_text=$(cat "$error_file")
+            if [ -z "$error_text" ]; then
+                error_text="Setting up Proton failed. See $DEBUG_LOG for details."
+            fi
+            ui_msg "Error" "$error_text"
             rm -f "$error_file"
             exit 1
         fi
@@ -563,14 +693,15 @@ setup_proton_and_dlls() {
     dbg "setup_proton_and_dlls: exit"
 }
 
-# run_in_prefix proton_dir prefix_path -- executable [args...]
+# run_in_prefix proton_dir prefix_path executable [args...]
 run_in_prefix() {
     dbg "run_in_prefix: enter proton_dir=[$1] prefix_path=[$2]"
-    local proton_dir="$1" prefix_path="$2"
+    local proton_dir="$1" prefix_path="$2" rc=0
     shift 2
-    dbg "run_in_prefix: calling umu-run with args: $*"
-    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" umu-run "$@"
-    dbg "run_in_prefix: umu-run returned rc=$?"
+    dbg "run_in_prefix: calling $UMU_RUN_BIN with args: $*"
+    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" "$UMU_RUN_BIN" "$@" || rc=$?
+    dbg "run_in_prefix: umu-run returned rc=$rc"
+    return "$rc"
 }
 
 show_installer_tips() {
@@ -579,7 +710,7 @@ show_installer_tips() {
 
 A few tips:
 
-- A shortcut has already been added to your applications menu (this works on GNOME, KDE Plasma, XFCE, and most other Linux desktops).
+- Once the installer has finished, a shortcut will be added to your applications menu (this works on GNOME, KDE Plasma, XFCE, and most other Linux desktops).
 
 - In the Launcher's settings, turn off \"minimize to taskbar\". Wine has no system tray for it to minimize into, so the window can vanish entirely and need to be killed manually to close.
 
@@ -608,20 +739,28 @@ create_desktop_entry() {
     local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
     local source_icon="$prefix_path/$ICON_REL_PATH"
     local icon_line=""
+    local launch_log="$HOME/.local/share/somnilux/launch.log"
 
     mkdir -p "$apps_dir"
 
-    if [ -f "$source_icon" ] && command -v magick >/dev/null 2>&1; then
+    local convert_cmd=""
+    if command -v magick >/dev/null 2>&1; then
+        convert_cmd="magick"
+    elif command -v convert >/dev/null 2>&1; then
+        convert_cmd="convert"
+    fi
+
+    if [ -f "$source_icon" ] && [ -n "$convert_cmd" ]; then
         mkdir -p "$ICON_DEST_DIR"
-        dbg "create_desktop_entry: converting icon $source_icon"
-        if magick "$source_icon[0]" "$ICON_DEST_DIR/somnium-space.png" 2>>"$DEBUG_LOG"; then
+        dbg "create_desktop_entry: converting icon $source_icon with $convert_cmd"
+        if "$convert_cmd" "$source_icon[0]" "$ICON_DEST_DIR/somnium-space.png" 2>>"$DEBUG_LOG"; then
             icon_line="Icon=$ICON_DEST_DIR/somnium-space.png"
             dbg "create_desktop_entry: icon converted OK"
         else
             dbg "create_desktop_entry: icon conversion FAILED, continuing without one"
         fi
     else
-        dbg "create_desktop_entry: no source icon or no magick, continuing without one"
+        dbg "create_desktop_entry: no source icon or no ImageMagick, continuing without one"
     fi
 
     cat > "$desktop_file" <<EOF
@@ -629,7 +768,7 @@ create_desktop_entry() {
 Type=Application
 Name=Somnium Space
 Comment=Somnium Space VR, via somnilux
-Exec=env PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID=umu-somnium umu-run "$launcher_path"
+Exec=sh -c 'mkdir -p "\$(dirname "\$1")" && env PROTONPATH="\$2" WINEPREFIX="\$3" GAMEID=umu-somnium "\$4" "\$5" >"\$1" 2>&1' sh "$launch_log" "$proton_dir" "$prefix_path" "$UMU_RUN_BIN" "$launcher_path"
 Terminal=false
 Categories=Game;
 $icon_line
@@ -648,6 +787,7 @@ EOF
 main() {
     dbg "main: enter"
     local mode
+    check_dependencies
     main_menu mode
     dbg "main: mode=[$mode]"
 
@@ -660,6 +800,8 @@ main() {
             install_flow installer_path prefix_path proton_version proton_dir
             dbg "main: install_flow returned installer_path=[$installer_path] prefix_path=[$prefix_path] proton_version=[$proton_version] proton_dir=[$proton_dir]"
 
+            dbg "main: calling download_umu"
+            download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_prefix_and_run_installer"
@@ -667,7 +809,7 @@ main() {
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix_path" "$proton_dir"
 
-            ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry."
+            ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: install branch done"
             ;;
         repair)
@@ -683,13 +825,20 @@ main() {
             proton_version="${proton_version%-somnilux}"
             dbg "main: derived proton_version=[$proton_version]"
 
+            dbg "main: calling download_umu"
+            download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix" "$proton_dir"
 
-            ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed."
+            ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: repair branch done"
+            ;;
+        *)
+            dbg "main: unexpected mode=[$mode], aborting"
+            ui_msg "Error" "Unexpected choice: '$mode'. Nothing has been changed."
+            exit 1
             ;;
     esac
     dbg "main: exit"
