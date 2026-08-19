@@ -25,76 +25,78 @@ if command -v whiptail >/dev/null 2>&1; then
 fi
 dbg "top-level: HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
 
-# ui_menu title prompt tag1 text1 [tag2 text2 ...]
-# Echoes the chosen tag to stdout.
+# ui_menu outvar title prompt tag1 text1 [tag2 text2 ...]
+# Writes the chosen tag into the caller's outvar. No subshell, no
+# dependence on the caller's own stdout/pipe context.
 ui_menu() {
-    dbg "ui_menu: enter title=[$1]"
-    local title="$1" prompt="$2"
+    local -n __um_out="$1"
+    shift
+    local __um_title="$1" __um_prompt="$2"
     shift 2
+    dbg "ui_menu: enter title=[$__um_title]"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         dbg "ui_menu: calling whiptail --menu"
-        local rc=0 out
-        out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --menu "$prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || rc=$?
-        dbg "ui_menu: whiptail --menu returned rc=$rc out=[$out]"
-        echo "$out"
-        return "$rc"
+        local __um_rc=0
+        __um_out=$(whiptail --backtitle "$BACKTITLE" --title "$__um_title" --menu "$__um_prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || __um_rc=$?
+        dbg "ui_menu: whiptail --menu returned rc=$__um_rc out=[$__um_out]"
+        return "$__um_rc"
     fi
 
-    echo "== $title ==" >&2
-    echo "$prompt" >&2
-    local i=0 tags=() tag text
+    echo "== $__um_title ==" >&2
+    echo "$__um_prompt" >&2
+    local __um_i=0 __um_tags=() __um_tag __um_text
     while [ $# -gt 0 ]; do
-        i=$((i + 1))
-        tag="$1"
-        text="$2"
-        tags+=("$tag")
-        if [ -n "$text" ]; then
-            echo "  $i) $tag $text" >&2
+        __um_i=$((__um_i + 1))
+        __um_tag="$1"
+        __um_text="$2"
+        __um_tags+=("$__um_tag")
+        if [ -n "$__um_text" ]; then
+            echo "  $__um_i) $__um_tag $__um_text" >&2
         else
-            echo "  $i) $tag" >&2
+            echo "  $__um_i) $__um_tag" >&2
         fi
         shift 2
     done
-    local choice
+    local __um_choice
     while true; do
-        read -r -p "Enter choice [1-$i]: " choice
-        if [ "$choice" -ge 1 ] 2>/dev/null && [ "$choice" -le "$i" ] 2>/dev/null; then
-            echo "${tags[$((choice - 1))]}"
-            dbg "ui_menu: fallback chose ${tags[$((choice - 1))]}"
+        read -r -p "Enter choice [1-$__um_i]: " __um_choice
+        if [ "$__um_choice" -ge 1 ] 2>/dev/null && [ "$__um_choice" -le "$__um_i" ] 2>/dev/null; then
+            __um_out="${__um_tags[$((__um_choice - 1))]}"
+            dbg "ui_menu: fallback chose $__um_out"
             return
         fi
         echo "Invalid choice." >&2
     done
 }
 
-# ui_input title prompt default
-# Echoes the entered value to stdout.
+# ui_input outvar title prompt default
 ui_input() {
-    dbg "ui_input: enter title=[$1]"
-    local title="$1" prompt="$2" default="${3:-}"
+    local -n __ui_out="$1"
+    shift
+    local __ui_title="$1" __ui_prompt="$2" __ui_default="${3:-}"
+    dbg "ui_input: enter title=[$__ui_title]"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         dbg "ui_input: calling whiptail --inputbox"
-        local rc=0 out
-        out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --inputbox "$prompt" 12 78 "$default" 3>&1 1>&2 2>&3) || rc=$?
-        dbg "ui_input: whiptail --inputbox returned rc=$rc out=[$out]"
-        echo "$out"
-        return "$rc"
+        local __ui_rc=0
+        __ui_out=$(whiptail --backtitle "$BACKTITLE" --title "$__ui_title" --inputbox "$__ui_prompt" 12 78 "$__ui_default" 3>&1 1>&2 2>&3) || __ui_rc=$?
+        dbg "ui_input: whiptail --inputbox returned rc=$__ui_rc out=[$__ui_out]"
+        return "$__ui_rc"
     fi
 
-    echo "== $title ==" >&2
-    [ -n "$default" ] && echo "(default: $default)" >&2
-    local value
-    read -r -e -i "$default" -p "$prompt: " value
-    dbg "ui_input: fallback got value=[${value:-$default}]"
-    echo "${value:-$default}"
+    echo "== $__ui_title ==" >&2
+    [ -n "$__ui_default" ] && echo "(default: $__ui_default)" >&2
+    local __ui_value
+    read -r -e -i "$__ui_default" -p "$__ui_prompt: " __ui_value
+    __ui_out="${__ui_value:-$__ui_default}"
+    dbg "ui_input: fallback got value=[$__ui_out]"
 }
 
 # ui_yesno title prompt
-# Returns 0 for yes, 1 for no.
+# Returns 0 for yes, 1 for no. No output value, so no nameref needed.
 ui_yesno() {
     dbg "ui_yesno: enter title=[$1]"
     local title="$1" prompt="$2"
@@ -102,7 +104,7 @@ ui_yesno() {
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         local rc=0
-        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 || rc=$?
+        whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 1>&2 || rc=$?
         dbg "ui_yesno: whiptail --yesno returned rc=$rc"
         return "$rc"
     fi
@@ -117,6 +119,7 @@ ui_yesno() {
 }
 
 # ui_msg title message [height] [width]
+# No output value, so no nameref needed.
 ui_msg() {
     dbg "ui_msg: enter title=[$1]"
     local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
@@ -125,7 +128,7 @@ ui_msg() {
         sleep 0.2
         dbg "ui_msg: calling whiptail --msgbox height=$height width=$width message_len=${#message}"
         local rc=0
-        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" || rc=$?
+        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" 1>&2 || rc=$?
         dbg "ui_msg: whiptail --msgbox returned rc=$rc"
         return "$rc"
     fi
@@ -162,45 +165,48 @@ fetch_supported_versions() {
     dbg "fetch_supported_versions: exit DEFAULT_PROTON_VERSION=$DEFAULT_PROTON_VERSION DEFAULT_WINE_VERSION=$DEFAULT_WINE_VERSION"
 }
 
-# Echoes the chosen Proton version to stdout.
+# pick_proton_version outvar
 pick_proton_version() {
+    local -n __pv_out="$1"
     dbg "pick_proton_version: enter"
-    local menu_args=() version
-    for version in "${SUPPORTED_PROTON_VERSIONS[@]}"; do
-        if [ "$version" = "$DEFAULT_PROTON_VERSION" ]; then
-            menu_args+=("$version" "(recommended)")
+    local __pv_menu_args=() __pv_version
+    for __pv_version in "${SUPPORTED_PROTON_VERSIONS[@]}"; do
+        if [ "$__pv_version" = "$DEFAULT_PROTON_VERSION" ]; then
+            __pv_menu_args+=("$__pv_version" "(recommended)")
         else
-            menu_args+=("$version" "")
+            __pv_menu_args+=("$__pv_version" "")
         fi
     done
 
-    local choice
+    local __pv_choice
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         dbg "pick_proton_version: calling whiptail --menu"
-        local rc=0
-        choice=$(whiptail --backtitle "$BACKTITLE" --title "Choose a Proton version" \
+        local __pv_rc=0
+        __pv_choice=$(whiptail --backtitle "$BACKTITLE" --title "Choose a Proton version" \
             --default-item "$DEFAULT_PROTON_VERSION" \
             --menu "Recommended: $DEFAULT_PROTON_VERSION" 20 78 10 \
-            "${menu_args[@]}" 3>&1 1>&2 2>&3) || rc=$?
-        dbg "pick_proton_version: whiptail --menu returned rc=$rc choice=[$choice]"
+            "${__pv_menu_args[@]}" 3>&1 1>&2 2>&3) || __pv_rc=$?
+        dbg "pick_proton_version: whiptail --menu returned rc=$__pv_rc choice=[$__pv_choice]"
     else
-        choice=$(ui_menu "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${menu_args[@]}")
+        ui_menu __pv_choice "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${__pv_menu_args[@]}"
     fi
 
-    if [ "$choice" != "$DEFAULT_PROTON_VERSION" ]; then
+    if [ "$__pv_choice" != "$DEFAULT_PROTON_VERSION" ]; then
         dbg "pick_proton_version: non-default chosen, showing warning"
         ui_msg "Warning" "This version of Proton is untested and may break the launcher. $DEFAULT_PROTON_VERSION and Wine $DEFAULT_WINE_VERSION is recommended."
     fi
 
-    dbg "pick_proton_version: exit choice=[$choice]"
-    echo "$choice"
+    dbg "pick_proton_version: exit choice=[$__pv_choice]"
+    __pv_out="$__pv_choice"
 }
 
-# Echoes "install" or "repair" to stdout.
+# main_menu outvar
+# Writes "install" or "repair" into outvar.
 main_menu() {
+    local -n __mm_out="$1"
     dbg "main_menu: enter"
-    ui_menu "somnilux" "Set up Somnium Space on Linux" \
+    ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" \
         "install" "Install Somnium Space" \
         "repair" "Repair an existing install"
     dbg "main_menu: exit"
@@ -212,87 +218,90 @@ default_prefix_has_somnium() {
     [ -f "$DEFAULT_PREFIX/$LAUNCHER_REL_PATH" ]
 }
 
-# Echoes the resolved prefix path to stdout.
+# repair_flow outvar
+# Writes the resolved prefix path into outvar.
 repair_flow() {
+    local -n __rf_out="$1"
     dbg "repair_flow: enter"
-    local prefix
 
     if default_prefix_has_somnium; then
         dbg "repair_flow: found at default location"
-        echo "$DEFAULT_PREFIX"
+        __rf_out="$DEFAULT_PREFIX"
         return
     fi
 
     dbg "repair_flow: not found at default, showing msg"
     ui_msg "Not found" "No Somnium install found at the default location ($DEFAULT_PREFIX)."
     dbg "repair_flow: asking for manual path"
-    prefix=$(ui_input "Existing prefix" "Enter the path to your existing Somnium prefix" "")
-    dbg "repair_flow: exit prefix=[$prefix]"
-    echo "$prefix"
+    ui_input __rf_out "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+    dbg "repair_flow: exit prefix=[$__rf_out]"
 }
 
-# find_proton_dir_for_prefix prefix_path
+# find_proton_dir_for_prefix outvar prefix_path
 # Looks for a single *-somnilux sibling directory next to the prefix. If
 # there isn't exactly one, asks the user which Proton version it is via
-# the normal version picker. Echoes the resolved Proton directory -- which
-# may not exist yet, same as a fresh install; the caller (setup_proton_and_dlls)
-# downloads it if needed.
+# the normal version picker. Writes the resolved Proton directory into
+# outvar -- which may not exist yet, same as a fresh install; the caller
+# (setup_proton_and_dlls) downloads it if needed.
 find_proton_dir_for_prefix() {
-    dbg "find_proton_dir_for_prefix: enter prefix_path=[$1]"
-    local prefix_path="$1"
-    local parent candidates=() proton_version
+    local -n __fp_out="$1"
+    local __fp_prefix_path="$2"
+    dbg "find_proton_dir_for_prefix: enter prefix_path=[$__fp_prefix_path]"
+    local __fp_parent __fp_candidates=() __fp_version
 
-    parent=$(dirname "$prefix_path")
-    dbg "find_proton_dir_for_prefix: searching in parent=[$parent]"
-    while IFS= read -r -d '' candidate; do
-        candidates+=("$candidate")
-    done < <(find "$parent" -maxdepth 1 -type d -name '*-somnilux' -print0 2>/dev/null)
-    dbg "find_proton_dir_for_prefix: found ${#candidates[@]} candidate(s): ${candidates[*]:-none}"
+    __fp_parent=$(dirname "$__fp_prefix_path")
+    dbg "find_proton_dir_for_prefix: searching in parent=[$__fp_parent]"
+    while IFS= read -r -d '' __fp_candidate; do
+        __fp_candidates+=("$__fp_candidate")
+    done < <(find "$__fp_parent" -maxdepth 1 -type d -name '*-somnilux' -print0 2>/dev/null)
+    dbg "find_proton_dir_for_prefix: found ${#__fp_candidates[@]} candidate(s): ${__fp_candidates[*]:-none}"
 
-    if [ "${#candidates[@]}" -eq 1 ]; then
-        dbg "find_proton_dir_for_prefix: exit single candidate=[${candidates[0]}]"
-        echo "${candidates[0]}"
+    if [ "${#__fp_candidates[@]}" -eq 1 ]; then
+        dbg "find_proton_dir_for_prefix: exit single candidate=[${__fp_candidates[0]}]"
+        __fp_out="${__fp_candidates[0]}"
         return
     fi
 
     dbg "find_proton_dir_for_prefix: calling pick_proton_version"
-    proton_version=$(pick_proton_version)
-    dbg "find_proton_dir_for_prefix: exit computed=[$parent/${proton_version}-somnilux]"
-    echo "$parent/${proton_version}-somnilux"
+    pick_proton_version __fp_version
+    dbg "find_proton_dir_for_prefix: exit computed=[$__fp_parent/${__fp_version}-somnilux]"
+    __fp_out="$__fp_parent/${__fp_version}-somnilux"
 }
 
-# Expands a leading ~ to $HOME. Echoes the result to stdout.
+# expand_path outvar path
+# Expands a leading ~ to $HOME into outvar.
 expand_path() {
-    local path="$1"
-    echo "${path/#\~/$HOME}"
+    local -n __ep_out="$1"
+    __ep_out="${2/#\~/$HOME}"
 }
 
-# Echoes "installer_path|prefix_path|proton_version|proton_dir" to stdout.
+# install_flow installer_path_var prefix_path_var proton_version_var proton_dir_var
 install_flow() {
+    local -n __if_installer="$1"
+    local -n __if_prefix="$2"
+    local -n __if_version="$3"
+    local -n __if_dir="$4"
     dbg "install_flow: enter"
-    local installer_path prefix_path proton_version proton_dir
 
-    installer_path=$(ui_input "Somnium installer" "Enter the path to the Somnium Space installer (.exe)" "")
-    installer_path=$(expand_path "$installer_path")
-    dbg "install_flow: installer_path=[$installer_path]"
-    if [ ! -f "$installer_path" ]; then
+    ui_input __if_installer "Somnium installer" "Enter the path to the Somnium Space installer (.exe)" ""
+    expand_path __if_installer "$__if_installer"
+    dbg "install_flow: installer_path=[$__if_installer]"
+    if [ ! -f "$__if_installer" ]; then
         dbg "install_flow: installer_path NOT FOUND, exiting"
-        ui_msg "Error" "No file found at: $installer_path"
+        ui_msg "Error" "No file found at: $__if_installer"
         exit 1
     fi
 
-    prefix_path=$(ui_input "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX")
-    prefix_path=$(expand_path "$prefix_path")
-    dbg "install_flow: prefix_path=[$prefix_path]"
+    ui_input __if_prefix "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX"
+    expand_path __if_prefix "$__if_prefix"
+    dbg "install_flow: prefix_path=[$__if_prefix]"
 
     dbg "install_flow: calling pick_proton_version"
-    proton_version=$(pick_proton_version)
-    dbg "install_flow: proton_version=[$proton_version]"
+    pick_proton_version __if_version
+    dbg "install_flow: proton_version=[$__if_version]"
 
-    proton_dir="$(dirname "$prefix_path")/${proton_version}-somnilux"
-    dbg "install_flow: exit proton_dir=[$proton_dir]"
-
-    echo "$installer_path|$prefix_path|$proton_version|$proton_dir"
+    __if_dir="$(dirname "$__if_prefix")/${__if_version}-somnilux"
+    dbg "install_flow: exit proton_dir=[$__if_dir]"
 }
 
 # download_proton proton_version proton_dir
@@ -621,18 +630,17 @@ EOF
 main() {
     dbg "main: enter"
     local mode
-    mode=$(main_menu)
+    main_menu mode
     dbg "main: mode=[$mode]"
 
     case "$mode" in
         install)
             dbg "main: install branch start"
-            local result installer_path prefix_path proton_version proton_dir
+            local installer_path prefix_path proton_version proton_dir
             fetch_supported_versions
             dbg "main: calling install_flow"
-            result=$(install_flow)
-            dbg "main: install_flow returned result=[$result]"
-            IFS='|' read -r installer_path prefix_path proton_version proton_dir <<< "$result"
+            install_flow installer_path prefix_path proton_version proton_dir
+            dbg "main: install_flow returned installer_path=[$installer_path] prefix_path=[$prefix_path] proton_version=[$proton_version] proton_dir=[$proton_dir]"
 
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
@@ -647,11 +655,11 @@ main() {
         repair)
             dbg "main: repair branch start"
             local prefix proton_dir proton_version
-            prefix=$(repair_flow)
+            repair_flow prefix
             dbg "main: repair_flow returned prefix=[$prefix]"
             fetch_supported_versions
             dbg "main: calling find_proton_dir_for_prefix"
-            proton_dir=$(find_proton_dir_for_prefix "$prefix")
+            find_proton_dir_for_prefix proton_dir "$prefix"
             dbg "main: find_proton_dir_for_prefix returned proton_dir=[$proton_dir]"
             proton_version="${proton_dir##*/}"
             proton_version="${proton_version%-somnilux}"
