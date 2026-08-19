@@ -144,6 +144,44 @@ ui_msg() {
     read -r -p "Press Enter to continue..." _
 }
 
+MIN_PYTHON_VERSION="3.10"
+
+# Checks for the tools we can't work without. whiptail is deliberately not
+# included -- there's a plain-text fallback for it. python3 is needed by the
+# vendored umu-run, so a missing or too-old one only shows up as a launcher
+# that silently does nothing, long after this script has finished.
+check_dependencies() {
+    dbg "check_dependencies: enter"
+    local missing=() cmd
+
+    for cmd in curl tar python3; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
+    done
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        dbg "check_dependencies: missing=[${missing[*]}]"
+        ui_msg "Missing dependencies" "This script needs the following, which aren't installed:
+
+  ${missing[*]}
+
+Install them with your distribution's package manager and run this again."
+        exit 1
+    fi
+
+    if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" 2>/dev/null; then
+        local python_version
+        python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null || echo "unknown")
+        dbg "check_dependencies: python3 too old, got [$python_version]"
+        ui_msg "Python too old" "umu-run needs Python $MIN_PYTHON_VERSION or newer, but python3 here is $python_version.
+
+Somnium Space would install but the launcher would silently fail to start. Please update Python and run this again."
+        exit 1
+    fi
+    dbg "check_dependencies: exit, all present"
+}
+
 # Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
@@ -704,6 +742,7 @@ EOF
 main() {
     dbg "main: enter"
     local mode
+    check_dependencies
     main_menu mode
     dbg "main: mode=[$mode]"
 
