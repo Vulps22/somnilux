@@ -1,13 +1,12 @@
 # Somnilux
 
 Wine/Proton patches and setup tooling for running [Somnium Space](https://somniumspace.com)
-on Linux, in the absence of an official Linux-native client (currently in
-closed beta, per Somnium staff).
+on Linux independent of Steam.
 
 **Not affiliated with Somnium Space Ltd, the Wine project, or WineHQ.**
 This project does not distribute, modify, or redistribute any of Somnium's
-own client/launcher binaries — you install those yourself from Somnium's
-official installer. Everything here is a patch to Wine, which is free and
+own client/launcher binaries — you must download Somnium's official installer yourself, which Somnilux will start automatically when the environment is ready.
+Everything here is a patch to Wine, which is free and
 open source software (LGPL-2.1), aimed at fixing genuine Wine compatibility
 bugs that this app happens to trigger.
 
