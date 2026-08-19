@@ -2,6 +2,7 @@
 set -euo pipefail
 
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
+SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
 
 HAVE_WHIPTAIL=0
 if command -v whiptail >/dev/null 2>&1; then
@@ -21,11 +22,17 @@ ui_menu() {
 
     echo "== $title ==" >&2
     echo "$prompt" >&2
-    local i=0 tags=()
+    local i=0 tags=() tag text
     while [ $# -gt 0 ]; do
         i=$((i + 1))
-        tags+=("$1")
-        echo "  $i) $2" >&2
+        tag="$1"
+        text="$2"
+        tags+=("$tag")
+        if [ -n "$text" ]; then
+            echo "  $i) $tag $text" >&2
+        else
+            echo "  $i) $tag" >&2
+        fi
         shift 2
     done
     local choice
@@ -89,10 +96,57 @@ ui_msg() {
     read -r -p "Press Enter to continue..." _
 }
 
-main() {
+# Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
+fetch_supported_versions() {
+    local proton_txt default_txt
+
+    if ! proton_txt=$(curl -fsSL "$SUPPORTED_BASE_URL/proton.txt"); then
+        ui_msg "Error" "Could not fetch the list of supported Proton versions from GitHub. Check your internet connection."
+        exit 1
+    fi
+    if ! default_txt=$(curl -fsSL "$SUPPORTED_BASE_URL/default.txt"); then
+        ui_msg "Error" "Could not fetch the default Proton/Wine version from GitHub. Check your internet connection."
+        exit 1
+    fi
+
+    mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
+    DEFAULT_PROTON_VERSION=$(sed -n '1p' <<< "$default_txt")
+    DEFAULT_WINE_VERSION=$(sed -n '2p' <<< "$default_txt")
+}
+
+# Echoes the chosen Proton version to stdout.
+pick_proton_version() {
+    local menu_args=() version
+    for version in "${SUPPORTED_PROTON_VERSIONS[@]}"; do
+        if [ "$version" = "$DEFAULT_PROTON_VERSION" ]; then
+            menu_args+=("$version" "(recommended)")
+        else
+            menu_args+=("$version" "")
+        fi
+    done
+
     local choice
-    choice=$(ui_menu "somnilux" "Test menu" "a" "Option A" "b" "Option B")
-    ui_msg "Result" "You picked: $choice"
+    if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        choice=$(whiptail --backtitle "$BACKTITLE" --title "Choose a Proton version" \
+            --default-item "$DEFAULT_PROTON_VERSION" \
+            --menu "Recommended: $DEFAULT_PROTON_VERSION" 20 78 10 \
+            "${menu_args[@]}" 3>&1 1>&2 2>&3)
+    else
+        choice=$(ui_menu "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${menu_args[@]}")
+    fi
+
+    if [ "$choice" != "$DEFAULT_PROTON_VERSION" ]; then
+        ui_msg "Warning" "This version of Proton is untested and may break the launcher. $DEFAULT_PROTON_VERSION and Wine $DEFAULT_WINE_VERSION is recommended."
+    fi
+
+    echo "$choice"
+}
+
+main() {
+    fetch_supported_versions
+    local chosen
+    chosen=$(pick_proton_version)
+    ui_msg "Result" "You picked: $chosen"
 }
 
 main
