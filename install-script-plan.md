@@ -60,7 +60,8 @@ First screen: **Install** or **Repair**.
    next to the chosen prefix location (same drive/parent folder as
    whatever the user picked in step 2) — colocated with the game data,
    not in a separate fixed location, and not in Steam's
-   `compatibilitytools.d`.
+   `compatibilitytools.d`. Named `<proton-version>-somnilux` (e.g.
+   `GE-Proton11-5-somnilux`).
 5. Create the prefix (via `umu-run`, `GAMEID=umu-somnium`).
 6. Download this project's prebuilt, patched `secur32.so`/`.dll`,
    `crypt32.so`/`.dll`, `rsaenh.dll` (GitHub Release assets on
