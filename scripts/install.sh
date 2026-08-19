@@ -33,6 +33,7 @@ ui_menu() {
     shift 2
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        sleep 0.2
         dbg "ui_menu: calling whiptail --menu"
         local rc=0 out
         out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --menu "$prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || rc=$?
@@ -75,6 +76,7 @@ ui_input() {
     local title="$1" prompt="$2" default="${3:-}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        sleep 0.2
         dbg "ui_input: calling whiptail --inputbox"
         local rc=0 out
         out=$(whiptail --backtitle "$BACKTITLE" --title "$title" --inputbox "$prompt" 12 78 "$default" 3>&1 1>&2 2>&3) || rc=$?
@@ -98,6 +100,7 @@ ui_yesno() {
     local title="$1" prompt="$2"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        sleep 0.2
         local rc=0
         whiptail --backtitle "$BACKTITLE" --title "$title" --yesno "$prompt" 12 78 || rc=$?
         dbg "ui_yesno: whiptail --yesno returned rc=$rc"
@@ -119,6 +122,7 @@ ui_msg() {
     local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        sleep 0.2
         dbg "ui_msg: calling whiptail --msgbox height=$height width=$width message_len=${#message}"
         local rc=0
         whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width" || rc=$?
@@ -172,6 +176,7 @@ pick_proton_version() {
 
     local choice
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
+        sleep 0.2
         dbg "pick_proton_version: calling whiptail --menu"
         local rc=0
         choice=$(whiptail --backtitle "$BACKTITLE" --title "Choose a Proton version" \
