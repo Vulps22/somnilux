@@ -24,10 +24,11 @@ to trigger.
   before it does anything and tells you if something's missing.
 - A GPU driver and OpenXR runtime you can already run other VR titles with.
 
-You do **not** need Steam, Lutris, Heroic, or a system-wide
+You do **not** need Lutris, Heroic, or a system-wide
 [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)
-install. Somnilux downloads its own private copy of `umu-run` into
-`~/.local/share/somnilux/`, so it doesn't depend on your distribution
+install, and you don't need Steam unless you intend to use SteamVR to
+access Somnium Space. Somnilux downloads its own private copy of `umu-run`
+into `~/.local/share/somnilux/`, so it doesn't depend on your distribution
 packaging one.
 
 `whiptail` is optional but recommended — the script falls back to plain text
@@ -41,7 +42,13 @@ sudo pacman -S libnewt       # Arch (provides whiptail)
 
 ## Quick start
 
-Download and run the latest release:
+First, get Somnium Space's own Windows installer from
+[somniumspace.com](https://somniumspace.com) — the script will ask you where
+you saved it. Somnilux never distributes it for you.
+
+> Signing up for the first time? Use my referral code **VULPS22-WH22**.
+
+Then download and run the latest release:
 
 ```sh
 curl -LO https://github.com/Vulps22/somnilux/releases/latest/download/install.sh
@@ -75,6 +82,8 @@ prints if it fails.
 
 Somnilux has been tested on the following Linux distributions:
 
+✅ confirmed working · ⚠️ untested · ❌ known broken
+
 | Distribution | Stable | Notes |
 | --- | --- | --- |
 | Arch Linux | ⚠️ | Untested |
@@ -92,11 +101,11 @@ Somnilux has been tested on the following Linux distributions:
 
 Somnium Space has been confirmed to run with the following OpenXR runtimes:
 
+✅ confirmed working · ⚠️ untested · ❌ known broken
+
 | Runtime | Stable | Headsets | Notes |
 | --- | --- | --- | --- |
 | SteamVR | ✅ | Quest 3 (via Steam Link) | |
-
-✅ confirmed working · ⚠️ untested · ❌ known broken
 
 Untested doesn't mean broken — just that nobody has reported back yet. If
 you get Somnilux working on any of the above, on something not listed, or
