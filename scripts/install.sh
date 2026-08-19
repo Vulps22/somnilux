@@ -573,9 +573,10 @@ run_gauged_pipeline() {
         gauge_step 100 "Done."
         dbg "run_gauged_pipeline(subshell): reached end of piped block"
     } | whiptail --backtitle "$BACKTITLE" --title "Setting up Somnium Space" --gauge "Starting..." 10 78 0
+    local pipe_status=("${PIPESTATUS[@]}")
 
-    dbg "run_gauged_pipeline: whiptail --gauge pipeline returned, PIPESTATUS=${PIPESTATUS[*]}"
-    return "${PIPESTATUS[0]}"
+    dbg "run_gauged_pipeline: whiptail --gauge pipeline returned, PIPESTATUS=${pipe_status[*]}"
+    return "${pipe_status[0]}"
 }
 
 # setup_proton_and_dlls proton_version proton_dir
