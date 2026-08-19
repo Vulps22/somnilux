@@ -85,12 +85,12 @@ ui_yesno() {
     esac
 }
 
-# ui_msg title message
+# ui_msg title message [height] [width]
 ui_msg() {
-    local title="$1" message="$2"
+    local title="$1" message="$2" height="${3:-14}" width="${4:-78}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
-        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" 14 78
+        whiptail --backtitle "$BACKTITLE" --title "$title" --msgbox "$message" "$height" "$width"
         return
     fi
 
@@ -171,6 +171,35 @@ repair_flow() {
     echo "$prefix"
 }
 
+# find_proton_dir_for_prefix prefix_path
+# Looks for a single *-somnilux sibling directory next to the prefix. If
+# there isn't exactly one, asks the user which Proton version it is via
+# the normal version picker. Echoes the resolved Proton directory.
+find_proton_dir_for_prefix() {
+    local prefix_path="$1"
+    local parent candidates=() proton_version proton_dir
+
+    parent=$(dirname "$prefix_path")
+    while IFS= read -r -d '' candidate; do
+        candidates+=("$candidate")
+    done < <(find "$parent" -maxdepth 1 -type d -name '*-somnilux' -print0 2>/dev/null)
+
+    if [ "${#candidates[@]}" -eq 1 ]; then
+        echo "${candidates[0]}"
+        return
+    fi
+
+    proton_version=$(pick_proton_version)
+    proton_dir="$parent/${proton_version}-somnilux"
+
+    if [ ! -d "$proton_dir" ]; then
+        ui_msg "Error" "No Proton install found at $proton_dir for the version you picked."
+        exit 1
+    fi
+
+    echo "$proton_dir"
+}
+
 # Expands a leading ~ to $HOME. Echoes the result to stdout.
 expand_path() {
     local path="$1"
@@ -191,7 +220,6 @@ install_flow() {
     prefix_path=$(ui_input "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX")
     prefix_path=$(expand_path "$prefix_path")
 
-    fetch_supported_versions
     proton_version=$(pick_proton_version)
 
     proton_dir="$(dirname "$prefix_path")/${proton_version}-somnilux"
@@ -286,11 +314,24 @@ run_in_prefix() {
     PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" umu-run "$@"
 }
 
+show_installer_tips() {
+    ui_msg "Continue in the Somnium Space Installer" "The Somnium Space Installer window is about to open. Please continue there.
+
+A few tips:
+
+- A shortcut has already been added to your applications menu (this works on GNOME, KDE Plasma, XFCE, and most other Linux desktops).
+
+- In the Launcher's settings, turn off \"minimize to taskbar\". Wine has no system tray for it to minimize into, so the window can vanish entirely and need to be killed manually to close.
+
+- Windows-style notifications will not work under Wine." 20 78
+}
+
 # create_prefix_and_run_installer installer_path prefix_path proton_dir
 create_prefix_and_run_installer() {
     local installer_path="$1" prefix_path="$2" proton_dir="$3"
 
     mkdir -p "$prefix_path"
+    show_installer_tips
     echo "Creating the prefix and launching the Somnium installer..."
     run_in_prefix "$proton_dir" "$prefix_path" "$installer_path"
 }
@@ -330,19 +371,27 @@ main() {
     case "$mode" in
         install)
             local result installer_path prefix_path proton_version proton_dir
+            fetch_supported_versions
             result=$(install_flow)
             IFS='|' read -r installer_path prefix_path proton_version proton_dir <<< "$result"
-            ui_msg "Result" "Install flow not fully implemented yet.
 
-Installer: $installer_path
-Prefix: $prefix_path
-Proton version: $proton_version
-Proton dir: $proton_dir"
+            download_proton "$proton_version" "$proton_dir"
+            install_patched_dlls "$proton_dir"
+            create_prefix_and_run_installer "$installer_path" "$prefix_path" "$proton_dir"
+            create_desktop_entry "$prefix_path" "$proton_dir"
+
+            ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry."
             ;;
         repair)
-            local prefix
+            local prefix proton_dir
             prefix=$(repair_flow)
-            ui_msg "Result" "Repair flow not yet implemented. Would repair: $prefix"
+            fetch_supported_versions
+            proton_dir=$(find_proton_dir_for_prefix "$prefix")
+
+            install_patched_dlls "$proton_dir"
+            create_desktop_entry "$prefix" "$proton_dir"
+
+            ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed."
             ;;
     esac
 }
