@@ -593,7 +593,12 @@ setup_proton_and_dlls() {
         dbg "setup_proton_and_dlls: calling run_gauged_pipeline, error_file=[$error_file]"
         if ! run_gauged_pipeline "$version" "$dest" "$error_file"; then
             dbg "setup_proton_and_dlls: run_gauged_pipeline FAILED, showing error"
-            ui_msg "Error" "$(cat "$error_file")"
+            local error_text
+            error_text=$(cat "$error_file")
+            if [ -z "$error_text" ]; then
+                error_text="Setting up Proton failed. See /tmp/somnilux-debug.log for details."
+            fi
+            ui_msg "Error" "$error_text"
             rm -f "$error_file"
             exit 1
         fi
