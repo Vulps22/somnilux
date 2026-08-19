@@ -27,6 +27,7 @@ UMU_RELEASE_BASE_URL="https://github.com/Open-Wine-Components/umu-launcher/relea
 UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
+MIN_PYTHON_VERSION="3.10"
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -128,8 +129,6 @@ ui_msg() {
     return 0
 }
 
-MIN_PYTHON_VERSION="3.10"
-
 # Checks for the tools we can't work without. whiptail is deliberately not
 # included -- there's a plain-text fallback for it. python3 is needed by the
 # vendored umu-run, so a missing or too-old one only shows up as a launcher
@@ -154,7 +153,7 @@ Install them with your distribution's package manager and run this again."
         exit 1
     fi
 
-    if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" 2>/dev/null; then
+    if ! python3 -c "import sys; want = tuple(int(p) for p in '$MIN_PYTHON_VERSION'.split('.')); sys.exit(0 if sys.version_info[:len(want)] >= want else 1)" 2>/dev/null; then
         local python_version
         python_version=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>/dev/null || echo "unknown")
         dbg "check_dependencies: python3 too old, got [$python_version]"
