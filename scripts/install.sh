@@ -694,14 +694,15 @@ setup_proton_and_dlls() {
     dbg "setup_proton_and_dlls: exit"
 }
 
-# run_in_prefix proton_dir prefix_path -- executable [args...]
+# run_in_prefix proton_dir prefix_path executable [args...]
 run_in_prefix() {
     dbg "run_in_prefix: enter proton_dir=[$1] prefix_path=[$2]"
-    local proton_dir="$1" prefix_path="$2"
+    local proton_dir="$1" prefix_path="$2" rc=0
     shift 2
     dbg "run_in_prefix: calling $UMU_RUN_BIN with args: $*"
-    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" "$UMU_RUN_BIN" "$@"
-    dbg "run_in_prefix: umu-run returned rc=$?"
+    PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" "$UMU_RUN_BIN" "$@" || rc=$?
+    dbg "run_in_prefix: umu-run returned rc=$rc"
+    return "$rc"
 }
 
 show_installer_tips() {
