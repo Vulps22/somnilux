@@ -34,6 +34,13 @@ This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
 
+## Tested with
+
+So far this has only been tested against **SteamVR** as the OpenXR runtime.
+If you've got it working on something else (Monado, WiVRn, etc.), please
+[open an issue](https://github.com/Vulps22/somnilux/issues) or ping me on
+Discord (`@vulps22`) and let me know — good or bad, it all helps.
+
 ## What's fixed
 
 - Fixed `CertNameToStrW` not prefixing unrecognized certificate OIDs with `OID.` (crypt32)
