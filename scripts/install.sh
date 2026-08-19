@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'stty sane 2>/dev/null || true' EXIT
 
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
+CURL_TIMEOUT_OPTS=(--connect-timeout 10 --max-time 30)
+CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
 SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
 DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
@@ -103,11 +106,11 @@ ui_msg() {
 fetch_supported_versions() {
     local proton_txt default_txt
 
-    if ! proton_txt=$(curl -fsSL "$SUPPORTED_BASE_URL/proton.txt"); then
+    if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
         ui_msg "Error" "Could not fetch the list of supported Proton versions from GitHub. Check your internet connection."
         exit 1
     fi
-    if ! default_txt=$(curl -fsSL "$SUPPORTED_BASE_URL/default.txt"); then
+    if ! default_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/default.txt"); then
         ui_msg "Error" "Could not fetch the default Proton/Wine version from GitHub. Check your internet connection."
         exit 1
     fi
@@ -240,14 +243,14 @@ download_proton() {
     workdir=$(mktemp -d)
 
     echo "Downloading $tarball..."
-    if ! curl -fL --progress-bar -o "$workdir/$tarball" "$base_url/$tarball"; then
+    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$workdir/$tarball" "$base_url/$tarball"; then
         rm -rf "$workdir"
         ui_msg "Error" "Failed to download $tarball. Check your internet connection."
         exit 1
     fi
 
     echo "Downloading checksum..."
-    if ! curl -fsSL -o "$workdir/$sumfile" "$base_url/$sumfile"; then
+    if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$sumfile" "$base_url/$sumfile"; then
         rm -rf "$workdir"
         ui_msg "Error" "Failed to download the checksum file for $version."
         exit 1
@@ -286,13 +289,13 @@ install_patched_dlls() {
     for f in secur32.so crypt32.so; do
         [ -f "$dest_unix/$f.orig" ] || cp -a "$dest_unix/$f" "$dest_unix/$f.orig"
         chmod u+w "$dest_unix/$f"
-        curl -fsSL -o "$dest_unix/$f" "$release_url/$f" || return 1
+        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_unix/$f" "$release_url/$f" || return 1
     done
 
     for f in secur32.dll crypt32.dll rsaenh.dll; do
         [ -f "$dest_win/$f.orig" ] || cp -a "$dest_win/$f" "$dest_win/$f.orig"
         chmod u+w "$dest_win/$f"
-        curl -fsSL -o "$dest_win/$f" "$release_url/$f" || return 1
+        curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$dest_win/$f" "$release_url/$f" || return 1
     done
 }
 
@@ -311,10 +314,10 @@ gauge_step() {
 download_with_progress() {
     local url="$1" dest="$2" total current pct curl_pid
 
-    curl -fsL -o "$dest" "$url" &
+    curl -fsL "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$dest" "$url" &
     curl_pid=$!
 
-    total=$(curl -fsIL "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1) == "content-length:" {v=$2} END {print v}')
+    total=$(curl -fsIL "${CURL_TIMEOUT_OPTS[@]}" "$url" 2>/dev/null | tr -d '\r' | awk 'tolower($1) == "content-length:" {v=$2} END {print v}')
 
     while kill -0 "$curl_pid" 2>/dev/null; do
         if [ -f "$dest" ] && [ -n "${total:-}" ] && [ "$total" -gt 0 ] 2>/dev/null; then
@@ -355,7 +358,7 @@ run_gauged_pipeline() {
             fi
 
             gauge_step 40 "Verifying checksum..."
-            if ! curl -fsSL -o "$workdir/$sumfile" "$base_url/$sumfile"; then
+            if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$sumfile" "$base_url/$sumfile"; then
                 rm -rf "$workdir"
                 echo "Failed to download the checksum file for $version." > "$error_file"
                 exit 1
