@@ -198,6 +198,56 @@ install_flow() {
     echo "$installer_path|$prefix_path|$proton_version|$proton_dir"
 }
 
+# download_proton proton_version proton_dir
+# Downloads, checksum-verifies, and extracts the given GE-Proton release
+# into proton_dir. No-ops if proton_dir already exists.
+download_proton() {
+    local version="$1" dest="$2"
+
+    if [ -d "$dest" ]; then
+        echo "Proton already present at $dest, skipping download."
+        return
+    fi
+
+    local base_url="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/$version"
+    local tarball="$version-x86_64.tar.gz"
+    local sumfile="$version-x86_64.sha512sum"
+    local workdir
+    workdir=$(mktemp -d)
+
+    echo "Downloading $tarball..."
+    if ! curl -fL --progress-bar -o "$workdir/$tarball" "$base_url/$tarball"; then
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to download $tarball. Check your internet connection."
+        exit 1
+    fi
+
+    echo "Downloading checksum..."
+    if ! curl -fsSL -o "$workdir/$sumfile" "$base_url/$sumfile"; then
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to download the checksum file for $version."
+        exit 1
+    fi
+
+    echo "Verifying checksum..."
+    if ! (cd "$workdir" && sha512sum -c "$sumfile") >/dev/null; then
+        rm -rf "$workdir"
+        ui_msg "Error" "Checksum verification failed for $tarball. The download may be corrupt."
+        exit 1
+    fi
+
+    echo "Extracting..."
+    mkdir -p "$(dirname "$dest")"
+    if ! tar -xzf "$workdir/$tarball" -C "$workdir"; then
+        rm -rf "$workdir"
+        ui_msg "Error" "Failed to extract $tarball."
+        exit 1
+    fi
+
+    mv "$workdir/$version-x86_64" "$dest"
+    rm -rf "$workdir"
+}
+
 main() {
     local mode
     mode=$(main_menu)
