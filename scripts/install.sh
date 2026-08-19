@@ -3,6 +3,8 @@ set -euo pipefail
 
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
+DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
+LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
 
 HAVE_WHIPTAIL=0
 if command -v whiptail >/dev/null 2>&1; then
@@ -142,11 +144,49 @@ pick_proton_version() {
     echo "$choice"
 }
 
+# Echoes "install" or "repair" to stdout.
+main_menu() {
+    ui_menu "somnilux" "Set up Somnium Space on Linux" \
+        "install" "Install Somnium Space" \
+        "repair" "Repair an existing install"
+}
+
+# 0 if the default prefix exists and has Somnium installed in it, 1 otherwise.
+default_prefix_has_somnium() {
+    [ -f "$DEFAULT_PREFIX/$LAUNCHER_REL_PATH" ]
+}
+
+# Echoes the resolved prefix path to stdout.
+repair_flow() {
+    local prefix
+
+    if default_prefix_has_somnium; then
+        echo "$DEFAULT_PREFIX"
+        return
+    fi
+
+    ui_msg "Not found" "No Somnium install found at the default location ($DEFAULT_PREFIX)."
+    prefix=$(ui_input "Existing prefix" "Enter the path to your existing Somnium prefix" "")
+    echo "$prefix"
+}
+
 main() {
-    fetch_supported_versions
-    local chosen
-    chosen=$(pick_proton_version)
-    ui_msg "Result" "You picked: $chosen"
+    local mode
+    mode=$(main_menu)
+
+    case "$mode" in
+        install)
+            fetch_supported_versions
+            local chosen
+            chosen=$(pick_proton_version)
+            ui_msg "Result" "Install flow not yet implemented. Would install with: $chosen"
+            ;;
+        repair)
+            local prefix
+            prefix=$(repair_flow)
+            ui_msg "Result" "Repair flow not yet implemented. Would repair: $prefix"
+            ;;
+    esac
 }
 
 main
