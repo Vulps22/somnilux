@@ -1,0 +1,21 @@
+All patches in this directory apply cleanly, in order, on top of:
+
+  repository: https://github.com/wine-mirror/wine (mirror of the canonical
+              https://gitlab.winehq.org/wine/wine)
+  commit:     e99fc2f7587db7bc186293e9949fe0d3695cd430
+  date:       2026-08-14
+  version:    Wine 11.15
+
+To reproduce the exact source tree these patches were built against:
+
+  git clone https://github.com/wine-mirror/wine.git wine-source
+  cd wine-source
+  git checkout e99fc2f7587db7bc186293e9949fe0d3695cd430
+  git am ../patches/0001-crypt32-Add-OID.-prefix-for-unrecognized-RDN-OIDs-in.patch
+  git am ../patches/0002-secur32-Request-a-client-certificate-for-ASC_REQ_MUT.patch
+  git am ../patches/0003-secur32-Support-resuming-a-parked-handshake-after-SE.patch
+  git am ../patches/0004-secur32-Implement-SECPKG_ATTR_ISSUER_LIST_EX.patch
+
+Each patch is one atomic, single-purpose commit, per Wine's own patch
+guidelines (https://gitlab.winehq.org/wine/wine/-/wikis/Submitting-Patches).
+0001 is independent of the rest. 0002-0004 build on each other in order.
