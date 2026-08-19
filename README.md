@@ -77,7 +77,16 @@ Somnilux has been tested on the following Linux distributions:
 
 | Distribution | Stable | Notes |
 | --- | --- | --- |
-| Nobara 44 (Fedora) | ✅ | Primary development and testing machine. |
+| Arch Linux | ⚠️ | Untested |
+| Bazzite | ⚠️ | Untested |
+| Debian | ⚠️ | Untested |
+| Fedora | ⚠️ | Untested |
+| Linux Mint | ⚠️ | Untested |
+| Manjaro | ⚠️ | Untested |
+| Nobara 44 | ✅ | |
+| openSUSE | ⚠️ | Untested |
+| Pop!_OS | ⚠️ | Untested |
+| Ubuntu | ⚠️ | Untested |
 
 ## Tested OpenXR runtimes
 
@@ -85,14 +94,16 @@ Somnium Space has been confirmed to run with the following OpenXR runtimes:
 
 | Runtime | Stable | Headsets | Notes |
 | --- | --- | --- | --- |
-| SteamVR | ✅ | Quest 3 (via Steam Link) | Runs almost flawlessly. |
+| SteamVR | ✅ | Quest 3 (via Steam Link) | |
 
-Anything not listed simply hasn't been tried yet, rather than being known
-broken. If you get Somnilux working on another distribution, runtime or
-headset — or find one of the above doesn't hold up — please
+✅ confirmed working · ⚠️ untested · ❌ known broken
+
+Untested doesn't mean broken — just that nobody has reported back yet. If
+you get Somnilux working on any of the above, on something not listed, or
+find one of them doesn't hold up, please
 [open an issue](https://github.com/Vulps22/somnilux/issues) or ping me on
-Discord (`@vulps22`). Good or bad, it all helps, and the tables above only
-grow from reports.
+Discord (`@vulps22`). Good or bad, it all helps, and these tables only grow
+from reports.
 
 ## Known issues
 
