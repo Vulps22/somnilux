@@ -761,6 +761,96 @@ exec >"$LAUNCH_LOG" 2>&1
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
+PREFIX_CANON="${PREFIX_PATH%/}"
+PREFIX_CANON="${PREFIX_CANON%/pfx}"
+PREFIX_CANON="${PREFIX_CANON%/}"
+PREFIX_REAL="$(realpath -m "$PREFIX_CANON" 2>/dev/null || printf '%s' "$PREFIX_CANON")"
+
+self_pids() {
+    local pid=$$ depth=0 stat rest
+    while [ "$pid" -gt 1 ] && [ "$depth" -lt 64 ]; do
+        printf '%s\n' "$pid"
+        stat=$(cat "/proc/$pid/stat" 2>/dev/null) || break
+        rest=${stat#*') '}
+        set -- $rest
+        pid=${2:-1}
+        depth=$((depth + 1))
+    done
+}
+
+SELF_PIDS=" $(self_pids | tr '\n' ' ') "
+
+session_pids() {
+    local candidates f pid entry wp scdp
+    candidates=$(grep -lsaF \
+        -e "WINEPREFIX=$PREFIX_CANON" \
+        -e "WINEPREFIX=$PREFIX_REAL" \
+        -e "STEAM_COMPAT_DATA_PATH=$PREFIX_CANON" \
+        -e "STEAM_COMPAT_DATA_PATH=$PREFIX_REAL" \
+        /proc/[0-9]*/environ 2>/dev/null) || true
+    [ -n "$candidates" ] || return 0
+
+    for f in $candidates; do
+        pid=${f#/proc/}
+        pid=${pid%/environ}
+        case "$SELF_PIDS" in *" $pid "*) continue ;; esac
+        wp=""
+        scdp=""
+        { while IFS= read -r -d '' entry; do
+            case "$entry" in
+                WINEPREFIX=*)
+                    wp=${entry#WINEPREFIX=}
+                    wp=${wp%/}; wp=${wp%/pfx}; wp=${wp%/}
+                    ;;
+                STEAM_COMPAT_DATA_PATH=*)
+                    scdp=${entry#STEAM_COMPAT_DATA_PATH=}
+                    scdp=${scdp%/}; scdp=${scdp%/pfx}; scdp=${scdp%/}
+                    ;;
+            esac
+        done < "/proc/$pid/environ"; } 2>/dev/null
+        case "$wp" in "$PREFIX_CANON"|"$PREFIX_REAL") printf '%s\n' "$pid"; continue ;; esac
+        case "$scdp" in "$PREFIX_CANON"|"$PREFIX_REAL") printf '%s\n' "$pid" ;; esac
+    done
+}
+
+stop_existing_session() {
+    local pids pid waited
+    pids=$(session_pids)
+    if [ -z "$pids" ]; then
+        log "No existing session found for this prefix."
+        return 0
+    fi
+
+    log "An existing session is using $PREFIX_CANON. Stopping it first:"
+    for pid in $pids; do
+        log "  pid $pid  $({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | cut -c1-100)"
+    done
+
+    kill -TERM $pids 2>/dev/null || true
+    waited=0
+    while [ "$waited" -lt 20 ]; do
+        sleep 0.5
+        pids=$(session_pids)
+        if [ -z "$pids" ]; then
+            log "Previous session stopped."
+            return 0
+        fi
+        waited=$((waited + 1))
+    done
+
+    log "Still running after 10s, forcing: $(printf '%s' "$pids" | tr '\n' ' ')"
+    kill -KILL $pids 2>/dev/null || true
+    sleep 1
+
+    pids=$(session_pids)
+    if [ -n "$pids" ]; then
+        log "WARNING: survived SIGKILL: $(printf '%s' "$pids" | tr '\n' ' ')"
+        log "WARNING: this launch may hang. Log out and back in if it does."
+    else
+        log "Previous session stopped."
+    fi
+}
+
 openxr_manifest() {
     local dir name
     if [ -n "${XR_RUNTIME_JSON:-}" ] && [ -r "${XR_RUNTIME_JSON:-}" ]; then
@@ -856,8 +946,9 @@ setup_openxr_env() {
 }
 
 log "somnilux launching Somnium Space"
-log "prefix:  $PREFIX_PATH"
+log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
+stop_existing_session
 setup_openxr_env
 log "launcher: $LAUNCHER"
 log "---"
