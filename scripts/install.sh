@@ -22,6 +22,7 @@ ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
 LAUNCH_SCRIPT="$HOME/.local/share/somnilux/launch.sh"
 LAUNCH_LOG="$HOME/.local/share/somnilux/launch.log"
+OPENXR_OVERRIDE_CONF="$HOME/.local/share/somnilux/openxr.conf"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
 UMU_VERSION="1.4.4"
 UMU_SHA256="eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"
@@ -749,6 +750,7 @@ PREFIX_PATH="$prefix_path"
 UMU_RUN="$UMU_RUN_BIN"
 LAUNCHER="$launcher_path"
 LAUNCH_LOG="$LAUNCH_LOG"
+OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
 GAME_ID="umu-somnium"
 EOF
 
@@ -759,9 +761,104 @@ exec >"$LAUNCH_LOG" 2>&1
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
+openxr_manifest() {
+    local dir name
+    if [ -n "${XR_RUNTIME_JSON:-}" ] && [ -r "${XR_RUNTIME_JSON:-}" ]; then
+        printf '%s' "$XR_RUNTIME_JSON"
+        return 0
+    fi
+    local IFS=:
+    for dir in "${XDG_CONFIG_HOME:-$HOME/.config}" ${XDG_CONFIG_DIRS:-/etc/xdg} /etc/xdg; do
+        [ -n "$dir" ] || continue
+        for name in active_runtime.x86_64.json active_runtime.json; do
+            if [ -r "$dir/openxr/1/$name" ]; then
+                printf '%s' "$dir/openxr/1/$name"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+openxr_library() {
+    python3 - "$1" <<'PYTHON'
+import json, os, sys
+try:
+    with open(sys.argv[1]) as fh:
+        lib = json.load(fh)["runtime"]["library_path"]
+except Exception:
+    sys.exit(1)
+if not os.path.isabs(lib):
+    if "/" not in lib:
+        sys.exit(1)
+    lib = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(sys.argv[1])), lib))
+print(lib)
+PYTHON
+}
+
+share_root_for() {
+    local path="$1"
+    case "$path" in
+        "$HOME"/*) return 1 ;;
+        /usr/*|/etc/*|/bin/*|/sbin/*|/lib/*|/lib64/*|/run/*|/proc/*|/sys/*|/dev/*|/tmp/*|/var/tmp/*|/var/run/*)
+            return 1
+            ;;
+        */flatpak/app/*)
+            printf '%s' "${path%%/app/*}/app/$(printf '%s' "${path#*/app/}" | cut -d/ -f1)"
+            return 0
+            ;;
+    esac
+    dirname "$path"
+}
+
+OPENXR_ENV=()
+
+setup_openxr_env() {
+    local line manifest target lib path root shares=""
+
+    if [ -r "$OPENXR_OVERRIDE_CONF" ]; then
+        log "OpenXR: using overrides from $OPENXR_OVERRIDE_CONF"
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*) continue ;; esac
+            OPENXR_ENV+=("$line")
+            log "OpenXR:   $line"
+        done < "$OPENXR_OVERRIDE_CONF"
+        return 0
+    fi
+
+    OPENXR_ENV+=("PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES=1")
+
+    if ! manifest=$(openxr_manifest); then
+        log "OpenXR: no active runtime found. Start your runtime, then relaunch."
+        return 0
+    fi
+    target=$(realpath -m "$manifest" 2>/dev/null || printf '%s' "$manifest")
+    log "OpenXR: manifest $manifest"
+    [ "$target" = "$manifest" ] || log "OpenXR: resolves to $target"
+
+    lib=$(openxr_library "$target" 2>/dev/null) || lib=""
+    [ -n "$lib" ] && log "OpenXR: runtime library $lib"
+
+    for path in "$lib"; do
+        [ -n "$path" ] || continue
+        root=$(share_root_for "$path") || continue
+        [ -n "$root" ] || continue
+        case ":$shares:" in *":$root:"*) continue ;; esac
+        shares="${shares:+$shares:}$root"
+    done
+
+    if [ -n "$shares" ]; then
+        log "OpenXR: exposing to the container: $shares"
+        OPENXR_ENV+=("PRESSURE_VESSEL_FILESYSTEMS_RW=$shares")
+    else
+        log "OpenXR: no extra container paths needed for this runtime."
+    fi
+}
+
 log "somnilux launching Somnium Space"
 log "prefix:  $PREFIX_PATH"
 log "proton:  $PROTON_DIR"
+setup_openxr_env
 log "launcher: $LAUNCHER"
 log "---"
 
@@ -769,6 +866,7 @@ exec env \
     PROTONPATH="$PROTON_DIR" \
     WINEPREFIX="$PREFIX_PATH" \
     GAMEID="$GAME_ID" \
+    ${OPENXR_ENV[@]+"${OPENXR_ENV[@]}"} \
     "$UMU_RUN" "$LAUNCHER"
 SOMNILUX_LAUNCH_BODY
 
