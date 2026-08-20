@@ -116,10 +116,17 @@ Starting Somnium while it's already running stops the previous session first,
 then starts a clean one. This clears a stuck launcher, which otherwise leaves
 a `wineserver` holding the prefix and makes every later start hang silently.
 
+It asks first, and it applies to a healthy session too — if Somnium is up and
+working, continuing will close it and start over:
+
+- From a terminal, it counts down ten seconds. Press Ctrl+C to cancel, or
+  Enter to go immediately.
+- From the applications menu there is no terminal, so it shows a dialog
+  instead. If nothing answers it within thirty seconds it goes ahead, on the
+  assumption that you launched it because the old session was stuck.
+
 Only processes belonging to this Somnilux prefix are stopped; other Wine or
-Proton games running at the same time are left alone. Note that this applies
-to a session that is running normally too — if Somnium is up and working,
-launching it again will close it and start over.
+Proton games running at the same time are left alone.
 
 ## Tested distributions
 

@@ -756,10 +756,25 @@ EOF
 
     cat >> "$LAUNCH_SCRIPT.tmp" <<'SOMNILUX_LAUNCH_BODY'
 
+if [ -t 1 ] && [ -t 0 ]; then
+    INTERACTIVE=1
+    exec 3>&1
+else
+    INTERACTIVE=0
+    exec 3>/dev/null
+fi
+
 mkdir -p "$(dirname "$LAUNCH_LOG")"
 exec >"$LAUNCH_LOG" 2>&1
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+
+say() {
+    log "$*"
+    printf '%s\n' "$*" >&3
+}
+
+trap 'log "Cancelled with Ctrl+C. The running session was left alone."; exit 130' INT
 
 PREFIX_CANON="${PREFIX_PATH%/}"
 PREFIX_CANON="${PREFIX_CANON%/pfx}"
@@ -813,6 +828,46 @@ session_pids() {
     done
 }
 
+confirm_restart() {
+    local i rc message
+    message="Somnium Space is already running.
+
+This will close it and start the launcher again."
+
+    if [ "$INTERACTIVE" = 1 ]; then
+        say ""
+        say "Somnium Space is already running."
+        say "This will kill any existing Somnium Space processes and relaunch the launcher."
+        say "Press Ctrl+C to cancel, or Enter to continue now."
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            printf '\r  continuing in %2ds... ' "$i" >&3
+            if read -r -t 1; then
+                break
+            fi
+        done
+        printf '\r                          \r' >&3
+        return 0
+    fi
+
+    if command -v kdialog >/dev/null 2>&1; then
+        rc=0
+        timeout 30 kdialog --title "Somnilux" --warningcontinuecancel "$message" >/dev/null 2>&1 || rc=$?
+    elif command -v zenity >/dev/null 2>&1; then
+        rc=0
+        timeout 30 zenity --question --title "Somnilux" --text "$message" \
+            --ok-label "Restart" --cancel-label "Cancel" >/dev/null 2>&1 || rc=$?
+    else
+        log "No terminal and no dialog tool available, restarting without asking."
+        return 0
+    fi
+
+    case "$rc" in
+        0)   return 0 ;;
+        5|124) log "No answer to the restart prompt, restarting anyway."; return 0 ;;
+        *)   return 1 ;;
+    esac
+}
+
 stop_existing_session() {
     local pids pid waited
     pids=$(session_pids)
@@ -825,6 +880,16 @@ stop_existing_session() {
     for pid in $pids; do
         log "  pid $pid  $({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | cut -c1-100)"
     done
+
+    if ! confirm_restart; then
+        return 1
+    fi
+
+    pids=$(session_pids)
+    if [ -z "$pids" ]; then
+        log "The previous session exited while waiting for an answer."
+        return 0
+    fi
 
     kill -TERM $pids 2>/dev/null || true
     waited=0
@@ -948,7 +1013,10 @@ setup_openxr_env() {
 log "somnilux launching Somnium Space"
 log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
-stop_existing_session
+if ! stop_existing_session; then
+    log "Cancelled. The running session was left alone."
+    exit 0
+fi
 setup_openxr_env
 log "launcher: $LAUNCHER"
 log "---"
