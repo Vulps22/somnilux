@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Somnilux or Somnium Space isn't working
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in what you can. Nothing here needs to match a fixed list —
+        write your setup however you'd describe it.
+  - type: input
+    id: somnilux-version
+    attributes:
+      label: Somnilux version
+      description: The release you installed from, or "built from source".
+      placeholder: 3.0 Beta 1
+    validations:
+      required: true
+  - type: input
+    id: distribution
+    attributes:
+      label: Distribution
+      placeholder: Nobara 44
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: OpenXR runtime
+      placeholder: SteamVR
+  - type: input
+    id: detected-runtime
+    attributes:
+      label: The "Detected OXR Runtime" line from the launch window
+      description: >-
+        Somnilux 3.0 and later print this in the window that opens when
+        Somnium starts. Leave blank if you don't see one.
+      placeholder: "Detected OXR Runtime: SteamVR"
+  - type: input
+    id: headset
+    attributes:
+      label: Headset
+      placeholder: Quest 3, via Steam Link
+  - type: input
+    id: somnium-version
+    attributes:
+      label: Somnium Space version
+      placeholder: 3.2.5
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+  - type: textarea
+    id: launch-log
+    attributes:
+      label: launch.log
+      description: >-
+        From ~/.local/share/somnilux/launch.log — usually the single most
+        useful thing you can attach.
+      render: shell

@@ -1,0 +1,55 @@
+name: Compatibility report
+description: Tell us whether Somnilux works on your setup — good news welcome
+title: "[Compat]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These reports are what the compatibility tables in the README are
+        built from. "It just worked" is a genuinely useful report — please
+        don't skip it because nothing went wrong.
+  - type: input
+    id: distribution
+    attributes:
+      label: Distribution
+      placeholder: Nobara 44
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: OpenXR runtime
+      placeholder: WiVRn (Flatpak)
+    validations:
+      required: true
+  - type: input
+    id: headset
+    attributes:
+      label: Headset
+      placeholder: Quest 3, standalone
+  - type: input
+    id: somnilux-version
+    attributes:
+      label: Somnilux version
+      placeholder: 3.0 Beta 1
+    validations:
+      required: true
+  - type: input
+    id: somnium-version
+    attributes:
+      label: Somnium Space version
+      placeholder: 3.2.5
+  - type: textarea
+    id: result
+    attributes:
+      label: How did it go?
+      description: >-
+        Did it install, launch, and reach VR? If something didn't work, say
+        which part.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Workarounds you needed, oddities worth recording, log excerpts.
