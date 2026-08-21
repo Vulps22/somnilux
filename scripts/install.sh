@@ -767,6 +767,8 @@ fi
 mkdir -p "$(dirname "$LAUNCH_LOG")"
 exec >"$LAUNCH_LOG" 2>&1
 
+RUNTIME_NAME="none detected"
+
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
 say() {
@@ -835,10 +837,7 @@ confirm_restart() {
 This will close it and start the launcher again."
 
     if [ "$INTERACTIVE" = 1 ]; then
-        say ""
-        say "Somnium Space is already running."
-        say "This will kill any existing Somnium Space processes and relaunch the launcher."
-        say "Press Ctrl+C to cancel, or Enter to continue now."
+        say "Press Enter to continue now, or Ctrl+C to cancel."
         for i in 10 9 8 7 6 5 4 3 2 1; do
             printf '\r  continuing in %2ds... ' "$i" >&3
             if read -r -t 1; then
@@ -876,6 +875,8 @@ stop_existing_session() {
         return 0
     fi
 
+    say "Somnium Space instance detected."
+    say "This script will safely close it and start a new Somnium Space Launcher."
     log "An existing session is using $PREFIX_CANON. Stopping it first:"
     for pid in $pids; do
         log "  pid $pid  $({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | cut -c1-100)"
@@ -897,7 +898,7 @@ stop_existing_session() {
         sleep 0.5
         pids=$(session_pids)
         if [ -z "$pids" ]; then
-            log "Previous session stopped."
+            say "Existing instance closed."
             return 0
         fi
         waited=$((waited + 1))
@@ -951,6 +952,30 @@ print(lib)
 PYTHON
 }
 
+openxr_runtime_name() {
+    python3 - "$1" <<'PYTHON'
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        name = json.load(fh)["runtime"].get("name")
+except Exception:
+    sys.exit(1)
+if not name:
+    sys.exit(1)
+print(name)
+PYTHON
+}
+
+runtime_name_from_lib() {
+    case "$1" in
+        *wivrn*)              printf 'WiVRn' ;;
+        *monado*)             printf 'Monado' ;;
+        *steamvr*|*vrclient*) printf 'SteamVR' ;;
+        *openxr_*)            printf '%s' "${1##*/libopenxr_}" ;;
+        *)                    return 1 ;;
+    esac
+}
+
 share_root_for() {
     local path="$1"
     case "$path" in
@@ -972,6 +997,7 @@ setup_openxr_env() {
     local line manifest target lib path root shares=""
 
     if [ -r "$OPENXR_OVERRIDE_CONF" ]; then
+        RUNTIME_NAME="set by openxr.conf"
         log "OpenXR: using overrides from $OPENXR_OVERRIDE_CONF"
         while IFS= read -r line || [ -n "$line" ]; do
             case "$line" in ''|\#*) continue ;; esac
@@ -984,6 +1010,7 @@ setup_openxr_env() {
     OPENXR_ENV+=("PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES=1")
 
     if ! manifest=$(openxr_manifest); then
+        RUNTIME_NAME="none detected - start your VR runtime, then relaunch"
         log "OpenXR: no active runtime found. Start your runtime, then relaunch."
         return 0
     fi
@@ -993,6 +1020,10 @@ setup_openxr_env() {
 
     lib=$(openxr_library "$target" 2>/dev/null) || lib=""
     [ -n "$lib" ] && log "OpenXR: runtime library $lib"
+
+    RUNTIME_NAME=$(openxr_runtime_name "$target" 2>/dev/null) \
+        || RUNTIME_NAME=$(runtime_name_from_lib "$lib" 2>/dev/null) \
+        || RUNTIME_NAME="unrecognised"
 
     for path in "$lib"; do
         [ -n "$path" ] || continue
@@ -1014,19 +1045,29 @@ log "somnilux launching Somnium Space"
 log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
 if ! stop_existing_session; then
-    log "Cancelled. The running session was left alone."
+    say "Cancelled. Your existing Somnium Space instance was left alone."
     exit 0
 fi
 setup_openxr_env
 log "launcher: $LAUNCHER"
 log "---"
 
-exec env \
-    PROTONPATH="$PROTON_DIR" \
-    WINEPREFIX="$PREFIX_PATH" \
-    GAMEID="$GAME_ID" \
-    ${OPENXR_ENV[@]+"${OPENXR_ENV[@]}"} \
-    "$UMU_RUN" "$LAUNCHER"
+LAUNCH_CMD=(env
+    PROTONPATH="$PROTON_DIR"
+    WINEPREFIX="$PREFIX_PATH"
+    GAMEID="$GAME_ID"
+    ${OPENXR_ENV[@]+"${OPENXR_ENV[@]}"}
+    "$UMU_RUN" "$LAUNCHER")
+
+say ""
+say "Starting Somnium Space Launcher"
+say "Detected OXR Runtime: $RUNTIME_NAME"
+say "Launching: ${LAUNCH_CMD[*]}"
+say "==================================================================="
+
+( sleep 10; say ""; say "You can safely close this window." ) &
+
+exec "${LAUNCH_CMD[@]}"
 SOMNILUX_LAUNCH_BODY
 
     chmod +x "$LAUNCH_SCRIPT.tmp"
@@ -1073,7 +1114,7 @@ Type=Application
 Name=Somnium Space
 Comment=Somnium Space VR, via somnilux
 Exec="$LAUNCH_SCRIPT"
-Terminal=false
+Terminal=true
 Categories=Game;
 $icon_line
 EOF

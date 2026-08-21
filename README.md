@@ -66,18 +66,31 @@ This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
 
-## If the shortcut doesn't seem to do anything
+## The launch window
 
-The applications-menu shortcut writes everything the launcher prints to:
+Starting Somnium opens a terminal window telling you what it's doing:
+
+```
+Starting Somnium Space Launcher
+Detected OXR Runtime: SteamVR
+Launching: env PROTONPATH=... WINEPREFIX=... umu-run ".../Somnium Space Launcher.exe"
+===================================================================
+
+You can safely close this window.
+```
+
+Closing that window does not stop Somnium. It's there so you can see which
+OpenXR runtime was picked up, and so that a launch which fails says so
+instead of doing nothing at all.
+
+Everything else — the full launcher, umu and Proton output — goes to:
 
 ```
 ~/.local/share/somnilux/launch.log
 ```
 
-That's the first place to look, and the most useful thing to attach to a
-bug report. It also records which OpenXR runtime was detected and whether a
-previous session had to be stopped. The installer itself keeps a separate
-debug log, whose path it prints if it fails.
+That's the most useful thing to attach to a bug report. The installer keeps
+a separate debug log, whose path it prints if it fails.
 
 ## VR runtimes
 
@@ -119,11 +132,11 @@ a `wineserver` holding the prefix and makes every later start hang silently.
 It asks first, and it applies to a healthy session too — if Somnium is up and
 working, continuing will close it and start over:
 
-- From a terminal, it counts down ten seconds. Press Ctrl+C to cancel, or
-  Enter to go immediately.
-- From the applications menu there is no terminal, so it shows a dialog
-  instead. If nothing answers it within thirty seconds it goes ahead, on the
-  assumption that you launched it because the old session was stuck.
+- In the launch window it counts down ten seconds. Press Ctrl+C to cancel,
+  or Enter to go immediately.
+- If no terminal could be opened, it shows a dialog instead. If nothing
+  answers it within thirty seconds it goes ahead, on the assumption that you
+  launched it because the old session was stuck.
 
 Only processes belonging to this Somnilux prefix are stopped; other Wine or
 Proton games running at the same time are left alone.
