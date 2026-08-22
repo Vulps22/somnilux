@@ -357,6 +357,83 @@ main_menu() {
     dbg "main_menu: exit"
 }
 
+# Our own process tree, so a pattern match does not find this script.
+installer_pids() {
+    local pid=$$ depth=0 stat rest
+    while [ "$pid" -gt 1 ] && [ "$depth" -lt 64 ]; do
+        printf '%s\n' "$pid"
+        read -r _ rest < "/proc/$pid/stat" 2>/dev/null || break
+        rest=${rest#*) }
+        pid=$(printf '%s' "$rest" | cut -d' ' -f2)
+        [ -n "$pid" ] || break
+        depth=$((depth + 1))
+    done
+}
+
+# Anything holding the Wine prefix or the Proton tree open. Replacing files
+# underneath a running Wine corrupts the session, and any Wine command we run
+# would block behind the existing wineserver rather than starting.
+running_somnium_pids() {
+    local pid cmd mine
+    mine=" $(installer_pids | tr '\n' ' ') "
+    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+        case "$mine" in *" $pid "*) continue ;; esac
+        cmd=$({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null) || continue
+        [ -n "$cmd" ] || continue
+        case "$cmd" in
+            *"Somnium Space"*|*umu-somnium*|*-somnilux/files/*)
+                printf '%s\n' "$pid" ;;
+        esac
+    done
+}
+
+# Asks, then stops them. No countdown -- the installer cannot proceed either
+# way, so there is nothing to time out into.
+stop_running_somnium() {
+    dbg "stop_running_somnium: enter"
+    local pids waited
+    pids=$(running_somnium_pids | tr '\n' ' ')
+    pids="${pids% }"
+    if [ -z "$pids" ]; then
+        dbg "stop_running_somnium: nothing running"
+        return 0
+    fi
+    dbg "stop_running_somnium: found [$pids]"
+
+    ui_msg "Somnium Space is running" "Somnium Space is running. The installer cannot change files it is using, and any Wine command it runs would wait for that session to end.
+
+Press Enter to close Somnium Space and continue with the install.
+
+Processes: $pids"
+
+    echo "Closing Somnium Space..."
+    kill -TERM $pids 2>/dev/null || true
+    waited=0
+    while [ "$waited" -lt 20 ]; do
+        sleep 0.5
+        pids=$(running_somnium_pids | tr '\n' ' ')
+        pids="${pids% }"
+        if [ -z "$pids" ]; then
+            dbg "stop_running_somnium: stopped cleanly"
+            return 0
+        fi
+        waited=$((waited + 1))
+    done
+
+    dbg "stop_running_somnium: still up after 10s, forcing [$pids]"
+    kill -KILL $pids 2>/dev/null || true
+    sleep 1
+    pids=$(running_somnium_pids | tr '\n' ' ')
+    if [ -n "${pids// /}" ]; then
+        dbg "stop_running_somnium: survived SIGKILL [$pids]"
+        ui_msg "Could not close Somnium Space" "These processes did not stop: $pids
+
+Close them yourself, or log out and back in, then run the installer again."
+        exit 1
+    fi
+    dbg "stop_running_somnium: exit success"
+}
+
 # 0 if the default prefix exists and has Somnium installed in it, 1 otherwise.
 default_prefix_has_somnium() {
     dbg "default_prefix_has_somnium: checking $DEFAULT_PREFIX/$LAUNCHER_REL_PATH"
@@ -816,9 +893,17 @@ run_gauged_pipeline() {
         dbg "run_gauged_pipeline(subshell): install_patched_dlls done"
 
         if [ -n "$prefix" ] && [ -d "$prefix" ]; then
-            gauge_step 90 "Registering media handlers..."
+            local rmh_pid rmh_pct=88 rmh_text="Registering video and stream support (starting Wine)..."
+            gauge_step "$rmh_pct" "$rmh_text"
             dbg "run_gauged_pipeline(subshell): calling register_media_handlers"
-            register_media_handlers "$dest" "$prefix"
+            register_media_handlers "$dest" "$prefix" &
+            rmh_pid=$!
+            while kill -0 "$rmh_pid" 2>/dev/null; do
+                sleep 1
+                [ "$rmh_pct" -lt 98 ] && rmh_pct=$((rmh_pct + 1))
+                gauge_step "$rmh_pct" "$rmh_text"
+            done
+            wait "$rmh_pid" || true
             dbg "run_gauged_pipeline(subshell): register_media_handlers done"
         fi
 
@@ -864,8 +949,9 @@ setup_proton_and_dlls() {
     dbg "setup_proton_and_dlls: plain path, calling install_patched_dlls"
     if install_patched_dlls "$dest"; then
         if [ -n "$prefix" ] && [ -d "$prefix" ]; then
-            echo "Registering media handlers..."
+            echo "Registering video and stream support (starting Wine, this takes a moment)..."
             register_media_handlers "$dest" "$prefix"
+            echo "Done."
         fi
     else
         dbg "setup_proton_and_dlls: plain path install_patched_dlls FAILED"
@@ -1037,6 +1123,7 @@ This will close it and start the launcher again."
             fi
         done
         printf '\r                          \r' >&3
+        say "Continuing..."
         return 0
     fi
 
@@ -1084,6 +1171,7 @@ stop_existing_session() {
         return 0
     fi
 
+    say "Stopping process $(printf '%s' "$pids" | tr '\n' ' ')"
     kill -TERM $pids 2>/dev/null || true
     waited=0
     while [ "$waited" -lt 20 ]; do
@@ -1233,7 +1321,8 @@ setup_openxr_env() {
     fi
 }
 
-log "somnilux launching Somnium Space"
+say "Starting Somnium Space Launcher"
+say ""
 log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
 if ! stop_existing_session; then
@@ -1253,7 +1342,6 @@ LAUNCH_CMD=(env
     "$UMU_RUN" "$LAUNCHER")
 
 say ""
-say "Starting Somnium Space Launcher"
 say "Detected OXR Runtime: $RUNTIME_NAME"
 say "Launching: ${LAUNCH_CMD[*]}"
 say "==================================================================="
@@ -1326,6 +1414,7 @@ main() {
     dbg "main: enter"
     local mode
     check_dependencies
+    stop_running_somnium
     cache_load || true
     main_menu mode
     dbg "main: mode=[$mode]"
