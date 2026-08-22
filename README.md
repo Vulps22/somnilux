@@ -66,17 +66,80 @@ This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
 
-## If the shortcut doesn't seem to do anything
+## The launch window
 
-The applications-menu shortcut writes everything the launcher prints to:
+Starting Somnium opens a terminal window telling you what it's doing:
+
+```
+Starting Somnium Space Launcher
+Detected OXR Runtime: SteamVR
+Launching: env PROTONPATH=... WINEPREFIX=... umu-run ".../Somnium Space Launcher.exe"
+===================================================================
+
+You can safely close this window.
+```
+
+Closing that window does not stop Somnium. It's there so you can see which
+OpenXR runtime was picked up, and so that a launch which fails says so
+instead of doing nothing at all.
+
+Everything else — the full launcher, umu and Proton output — goes to:
 
 ```
 ~/.local/share/somnilux/launch.log
 ```
 
-That's the first place to look, and the most useful thing to attach to a
-bug report. The installer itself keeps a separate debug log, whose path it
-prints if it fails.
+That's the most useful thing to attach to a bug report. The installer keeps
+a separate debug log, whose path it prints if it fails.
+
+## VR runtimes
+
+The shortcut runs `~/.local/share/somnilux/launch.sh`, which works out which
+OpenXR runtime is active each time you start the game and makes it reachable
+from inside the container umu runs Somnium in. Switching runtime needs no
+reinstall and no configuration — set your runtime as active the usual way and
+start Somnium again.
+
+Runtimes installed under your home directory (SteamVR, per-user Flatpaks,
+Envision builds) need nothing extra. System-wide Flatpak and `/opt` installs
+have their install directory shared into the container automatically.
+
+If your runtime needs something this doesn't work out on its own, create:
+
+```
+~/.local/share/somnilux/openxr.conf
+```
+
+with one `NAME=value` environment assignment per line. When that file exists
+it replaces the automatic detection entirely, so include every variable you
+need:
+
+```
+PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES=1
+PRESSURE_VESSEL_FILESYSTEMS_RW=/var/lib/flatpak/app/io.github.wivrn.wivrn
+```
+
+If you need one of these, please [open an issue](https://github.com/Vulps22/somnilux/issues)
+with your runtime and the contents — it usually means the automatic detection
+should be handling your case.
+
+## Restarting
+
+Starting Somnium while it's already running stops the previous session first,
+then starts a clean one. This clears a stuck launcher, which otherwise leaves
+a `wineserver` holding the prefix and makes every later start hang silently.
+
+It asks first, and it applies to a healthy session too — if Somnium is up and
+working, continuing will close it and start over:
+
+- In the launch window it counts down ten seconds. Press Ctrl+C to cancel,
+  or Enter to go immediately.
+- If no terminal could be opened, it shows a dialog instead. If nothing
+  answers it within thirty seconds it goes ahead, on the assumption that you
+  launched it because the old session was stuck.
+
+Only processes belonging to this Somnilux prefix are stopped; other Wine or
+Proton games running at the same time are left alone.
 
 ## Tested distributions
 
@@ -106,6 +169,8 @@ Somnium Space has been confirmed to run with the following OpenXR runtimes:
 | Runtime | Stable | Headsets | Notes |
 | --- | --- | --- | --- |
 | SteamVR | ✅ | Quest 3 (via Steam Link) | |
+| WiVRn | ⚠️ | | Untested; Flatpak installs are detected automatically |
+| Monado | ⚠️ | | Untested |
 
 Untested doesn't mean broken — just that nobody has reported back yet. If
 you get Somnilux working on any of the above, on something not listed, or
@@ -138,7 +203,9 @@ from reports.
 - `scripts/install.sh` — the setup script: downloads a GE-Proton release and
   its own copy of `umu-run`, downloads this project's prebuilt patched
   `secur32`/`crypt32`/`rsaenh`, and wires up a working prefix. Handles both
-  a fresh install and repairing an existing one.
+  a fresh install and repairing an existing one. It also generates
+  `~/.local/share/somnilux/launch.sh`, which is what the desktop shortcut
+  actually runs.
 - `supported/` — the Proton and Wine versions this project recommends,
   fetched by `install.sh` at run time so updates don't require a new script
   release.
