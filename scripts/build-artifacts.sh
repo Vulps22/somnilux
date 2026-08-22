@@ -12,6 +12,7 @@ WINE_SOURCE_DIR="${WINE_SOURCE_DIR:-$PROJECT_ROOT/wine-source}"
 WINE_GE_DIR="${WINE_GE_DIR:-$PROJECT_ROOT/wine-ge}"
 FFMPEG_DIR="${FFMPEG_DIR:-$PROJECT_ROOT/ffmpeg-build}"
 OUT_DIR="${OUT_DIR:-$PROJECT_ROOT/build-artifacts}"
+ARCHIVE="${ARCHIVE:-$PROJECT_ROOT/somnilux-binaries.tar.gz}"
 REFERENCE_PROTON="${REFERENCE_PROTON:-/mnt/games/GE-Proton11-5-somnilux}"
 
 FFMPEG_VERSION="8.1"
@@ -223,6 +224,14 @@ verify() {
     done < <(find "$OUT_DIR" -type f -name '*.so*' -print0)
 }
 
+package() {
+    say "Packaging"
+    rm -f "$ARCHIVE"
+    tar -czf "$ARCHIVE" -C "$OUT_DIR" . || die "failed to create $ARCHIVE"
+    info "$(printf '%10d  %s' "$(stat -c%s "$ARCHIVE")" "$ARCHIVE")"
+    info "install with: install.sh --use-local-dlls-at $ARCHIVE"
+}
+
 main() {
     preflight
     build_upstream_wine
@@ -230,6 +239,10 @@ main() {
     build_ffmpeg
     collect
     verify
+
+    if [ "$FAILED" -eq 0 ]; then
+        package
+    fi
 
     if [ "$FAILED" -ne 0 ]; then
         say "Done with warnings"
