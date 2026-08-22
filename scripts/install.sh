@@ -28,6 +28,61 @@ UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
+LOCAL_DLL_ARCHIVE=""
+
+usage() {
+    cat <<'EOF'
+somnilux installer
+
+  install.sh [--use-local-dlls-at <archive>]
+
+  --use-local-dlls-at <archive>
+        Install the patched binaries from a local .tar.gz instead of
+        downloading them from the release. The archive is the one produced by
+        scripts/build-artifacts.sh, laid out by destination:
+
+            x86_64-unix/       -> files/lib/wine/x86_64-unix/
+            x86_64-windows/    -> files/lib/wine/x86_64-windows/
+            x86_64-linux-gnu/  -> files/lib/x86_64-linux-gnu/
+
+        For testing a build before it is released. Everything else about the
+        install is unchanged.
+EOF
+}
+
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --use-local-dlls-at)
+                [ $# -ge 2 ] || { echo "--use-local-dlls-at needs a path" >&2; exit 1; }
+                LOCAL_DLL_ARCHIVE="$2"
+                shift 2
+                ;;
+            --use-local-dlls-at=*)
+                LOCAL_DLL_ARCHIVE="${1#*=}"
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                usage >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        if [ ! -f "$LOCAL_DLL_ARCHIVE" ]; then
+            echo "No such archive: $LOCAL_DLL_ARCHIVE" >&2
+            exit 1
+        fi
+        LOCAL_DLL_ARCHIVE=$(readlink -f "$LOCAL_DLL_ARCHIVE")
+    fi
+    dbg "parse_args: LOCAL_DLL_ARCHIVE=[$LOCAL_DLL_ARCHIVE]"
+}
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -473,11 +528,82 @@ download_umu() {
     dbg "download_umu: exit, vendored to $UMU_RUN_BIN"
 }
 
+# install_one_dll src proton_dir arch_dir
+# arch_dir is the archive's top-level directory, which names the destination.
+install_one_dll() {
+    local src="$1" proton_dir="$2" arch_dir="$3" dest_dir f
+    f=$(basename "$src")
+
+    case "$arch_dir" in
+        x86_64-unix)      dest_dir="$proton_dir/files/lib/wine/x86_64-unix" ;;
+        x86_64-windows)   dest_dir="$proton_dir/files/lib/wine/x86_64-windows" ;;
+        x86_64-linux-gnu) dest_dir="$proton_dir/files/lib/x86_64-linux-gnu" ;;
+        *) dbg "install_one_dll: unknown archive directory [$arch_dir]"; return 1 ;;
+    esac
+
+    if [ ! -f "$dest_dir/$f" ]; then
+        dbg "install_one_dll: expected $dest_dir/$f is missing"
+        return 1
+    fi
+    if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
+        dbg "install_one_dll: backup of $f FAILED"
+        return 1
+    fi
+    chmod u+w "$dest_dir/$f"
+    cp -f "$src" "$dest_dir/$f" || return 1
+    chmod 0644 "$dest_dir/$f"
+    dbg "install_one_dll: installed $arch_dir/$f"
+}
+
+# install_dlls_from_archive proton_dir archive
+install_dlls_from_archive() {
+    dbg "install_dlls_from_archive: enter proton_dir=[$1] archive=[$2]"
+    local proton_dir="$1" archive="$2"
+    local workdir found=0 d f
+
+    echo "Installing patched binaries from $(basename "$archive")..."
+
+    workdir=$(mktemp -d)
+    if ! tar -xzf "$archive" -C "$workdir" 2>/dev/null; then
+        dbg "install_dlls_from_archive: extract FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Could not extract $archive. It should be the .tar.gz produced by scripts/build-artifacts.sh."
+        return 1
+    fi
+
+    for d in x86_64-unix x86_64-windows x86_64-linux-gnu; do
+        [ -d "$workdir/$d" ] || continue
+        for f in "$workdir/$d"/*; do
+            [ -f "$f" ] || continue
+            if ! install_one_dll "$f" "$proton_dir" "$d"; then
+                rm -rf "$workdir"
+                return 1
+            fi
+            found=$((found + 1))
+        done
+    done
+
+    rm -rf "$workdir"
+    if [ "$found" -eq 0 ]; then
+        dbg "install_dlls_from_archive: archive contained nothing installable"
+        ui_msg "Error" "$archive contains none of the expected directories (x86_64-unix, x86_64-windows, x86_64-linux-gnu)."
+        return 1
+    fi
+    echo "Installed $found file(s)."
+    dbg "install_dlls_from_archive: exit success, $found file(s)"
+}
+
 # install_patched_dlls proton_dir
 # Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
 install_patched_dlls() {
     dbg "install_patched_dlls: enter proton_dir=[$1]"
     local proton_dir="$1"
+
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        install_dlls_from_archive "$proton_dir" "$LOCAL_DLL_ARCHIVE"
+        return $?
+    fi
+
     local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
     local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
     local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
@@ -844,6 +970,7 @@ main() {
     dbg "main: exit"
 }
 
+parse_args "$@"
 dbg "top-level: about to call main"
 main
 dbg "top-level: main returned, script ending normally"
