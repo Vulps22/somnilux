@@ -33,6 +33,7 @@ UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
 DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
+DLL_RELEASE_TAG=""
 PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
 CACHED_PREFIX=""
 CACHED_PROTON=""
@@ -264,7 +265,7 @@ Somnium Space would install but the launcher would silently fail to start. Pleas
 # Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
-    local proton_txt default_txt
+    local proton_txt default_txt dlls_txt
 
     dbg "fetch_supported_versions: curl proton.txt starting"
     if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
@@ -281,6 +282,14 @@ fetch_supported_versions() {
         exit 1
     fi
     dbg "fetch_supported_versions: curl default.txt done, got [$default_txt]"
+
+    dbg "fetch_supported_versions: curl dlls.txt starting"
+    if dlls_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/dlls.txt"); then
+        DLL_RELEASE_TAG=$(sed -n '1p' <<< "$dlls_txt")
+        dbg "fetch_supported_versions: DLL_RELEASE_TAG=[$DLL_RELEASE_TAG]"
+    else
+        dbg "fetch_supported_versions: no dlls.txt, deriving tag from the Wine version"
+    fi
 
     mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
     DEFAULT_PROTON_VERSION=$(sed -n '1p' <<< "$default_txt")
@@ -657,7 +666,7 @@ install_patched_dlls() {
         return $?
     fi
 
-    local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
+    local release_url="$DLL_RELEASE_BASE_URL/${DLL_RELEASE_TAG:-wine-$DEFAULT_WINE_VERSION}"
     local workdir rc
     workdir=$(mktemp -d)
 
