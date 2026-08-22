@@ -442,7 +442,11 @@ find_proton_dir_for_prefix() {
 # Expands a leading ~ to $HOME into outvar.
 expand_path() {
     local -n __ep_out="$1"
-    __ep_out="${2/#\~/$HOME}"
+    local __ep_path="${2/#\~/$HOME}"
+    while [ "$__ep_path" != "/" ] && [ "${__ep_path%/}" != "$__ep_path" ]; do
+        __ep_path="${__ep_path%/}"
+    done
+    __ep_out="$__ep_path"
 }
 
 # install_flow installer_path_var prefix_path_var proton_version_var proton_dir_var
@@ -742,8 +746,8 @@ download_with_progress() {
 # message to error_file and returns non-zero -- callers must not call
 # whiptail from inside this pipeline, only after it's done.
 run_gauged_pipeline() {
-    dbg "run_gauged_pipeline: enter version=[$1] dest=[$2]"
-    local version="$1" dest="$2" error_file="$3"
+    dbg "run_gauged_pipeline: enter version=[$1] dest=[$2] prefix=[$4]"
+    local version="$1" dest="$2" error_file="$3" prefix="${4:-}"
 
     dbg "run_gauged_pipeline: about to start piped block into whiptail --gauge"
     {
@@ -811,6 +815,13 @@ run_gauged_pipeline() {
         fi
         dbg "run_gauged_pipeline(subshell): install_patched_dlls done"
 
+        if [ -n "$prefix" ] && [ -d "$prefix" ]; then
+            gauge_step 90 "Registering media handlers..."
+            dbg "run_gauged_pipeline(subshell): calling register_media_handlers"
+            register_media_handlers "$dest" "$prefix"
+            dbg "run_gauged_pipeline(subshell): register_media_handlers done"
+        fi
+
         gauge_step 100 "Done."
         dbg "run_gauged_pipeline(subshell): reached end of piped block"
     } | whiptail --backtitle "$BACKTITLE" --title "Setting up Somnium Space" --gauge "Starting..." 10 78 0
@@ -825,14 +836,14 @@ run_gauged_pipeline() {
 # via the gauge pipeline when whiptail is available, plain functions
 # otherwise. Shows an error and exits on failure either way.
 setup_proton_and_dlls() {
-    dbg "setup_proton_and_dlls: enter version=[$1] dest=[$2] HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
-    local version="$1" dest="$2"
+    dbg "setup_proton_and_dlls: enter version=[$1] dest=[$2] prefix=[${3:-}] HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
+    local version="$1" dest="$2" prefix="${3:-}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         local error_file
         error_file=$(mktemp)
         dbg "setup_proton_and_dlls: calling run_gauged_pipeline, error_file=[$error_file]"
-        if ! run_gauged_pipeline "$version" "$dest" "$error_file"; then
+        if ! run_gauged_pipeline "$version" "$dest" "$error_file" "$prefix"; then
             dbg "setup_proton_and_dlls: run_gauged_pipeline FAILED, showing error"
             local error_text
             error_text=$(cat "$error_file")
@@ -851,7 +862,12 @@ setup_proton_and_dlls() {
     dbg "setup_proton_and_dlls: plain path, calling download_proton"
     download_proton "$version" "$dest"
     dbg "setup_proton_and_dlls: plain path, calling install_patched_dlls"
-    if ! install_patched_dlls "$dest"; then
+    if install_patched_dlls "$dest"; then
+        if [ -n "$prefix" ] && [ -d "$prefix" ]; then
+            echo "Registering media handlers..."
+            register_media_handlers "$dest" "$prefix"
+        fi
+    else
         dbg "setup_proton_and_dlls: plain path install_patched_dlls FAILED"
         ui_msg "Error" "Failed to install patched DLLs from the somnilux release."
         exit 1
@@ -875,7 +891,6 @@ register_media_handlers() {
     dbg "register_media_handlers: enter proton_dir=[$1] prefix_path=[$2]"
     local proton_dir="$1" prefix_path="$2"
 
-    echo "Registering media handlers..."
     if run_in_prefix "$proton_dir" "$prefix_path" regsvr32 /s winedmo.dll >/dev/null 2>&1; then
         dbg "register_media_handlers: exit success"
     else
@@ -1355,9 +1370,7 @@ main() {
             dbg "main: calling download_umu"
             download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
-            setup_proton_and_dlls "$proton_version" "$proton_dir"
-            dbg "main: calling register_media_handlers"
-            register_media_handlers "$proton_dir" "$prefix"
+            setup_proton_and_dlls "$proton_version" "$proton_dir" "$prefix"
             dbg "main: calling create_launch_script"
             create_launch_script "$prefix" "$proton_dir"
             dbg "main: calling create_desktop_entry"
