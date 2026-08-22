@@ -63,6 +63,31 @@ preflight() {
     info "jobs        : $JOBS"
 }
 
+# require_patched file marker description
+require_patched() {
+    local file="$1" marker="$2" what="$3"
+    if [ ! -f "$file" ]; then
+        die "$file not found -- is the source tree where it should be?"
+    fi
+    if ! grep -q "$marker" "$file"; then
+        die "$what is not applied in $(dirname "$(dirname "$file")")
+
+The tree builds fine without it and the result passes every ABI check, so
+this has to be caught here. Check out the branch carrying the patches:
+  wine-source -> release      wine-ge -> add-rtspt-support"
+    fi
+    info "$what: applied"
+}
+
+verify_sources() {
+    say "Checking the trees carry our patches"
+    require_patched "$WINE_SOURCE_DIR/dlls/crypt32/str.c" 'OID\.' "crypt32 unrecognised-OID prefix"
+    require_patched "$WINE_SOURCE_DIR/dlls/secur32/schannel.c" 'SECPKG_ATTR_ISSUER_LIST_EX' "secur32 issuer list"
+    require_patched "$WINE_GE_DIR/dlls/winedmo/unix_demuxer.c" 'parse_rtsp_url' "winedmo RTSP support"
+    require_patched "$WINE_GE_DIR/dlls/winedmo/media_source.c" 'object_context_open_stream' "winedmo non-blocking scheme handler"
+    require_patched "$WINE_GE_DIR/dlls/kernelbase/process.c" 'ytdlp_hack' "kernelbase yt-dlp hook"
+}
+
 # generate_proton_sources tree
 # Proton ships some of these out of sync with server/protocol.def and omits
 # others entirely. make_requests and make_specfiles rewrite tracked files, so
@@ -234,6 +259,7 @@ package() {
 
 main() {
     preflight
+    verify_sources
     build_upstream_wine
     build_ge_wine
     build_ffmpeg
