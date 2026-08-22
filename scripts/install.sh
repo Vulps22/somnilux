@@ -32,6 +32,7 @@ UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
+DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
 PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
 CACHED_PREFIX=""
 CACHED_PROTON=""
@@ -657,50 +658,21 @@ install_patched_dlls() {
     fi
 
     local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
-    local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
-    local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
-    local all_files=(secur32.so crypt32.so secur32.dll crypt32.dll rsaenh.dll)
-    local workdir f dest_dir
+    local workdir rc
     workdir=$(mktemp -d)
 
-    echo "Installing patched DLLs (Wine $DEFAULT_WINE_VERSION build)..."
+    echo "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
+    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" \
+              -o "$workdir/$DLL_ARCHIVE_NAME" "$release_url/$DLL_ARCHIVE_NAME"; then
+        dbg "install_patched_dlls: download of $DLL_ARCHIVE_NAME FAILED"
+        rm -rf "$workdir"
+        return 1
+    fi
 
-    for f in "${all_files[@]}"; do
-        dbg "install_patched_dlls: downloading $f"
-        if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$f" "$release_url/$f"; then
-            dbg "install_patched_dlls: download of $f FAILED"
-            rm -rf "$workdir"
-            return 1
-        fi
-        if [ ! -s "$workdir/$f" ]; then
-            dbg "install_patched_dlls: $f downloaded empty"
-            rm -rf "$workdir"
-            return 1
-        fi
-    done
-
-    for f in "${all_files[@]}"; do
-        case "$f" in
-            *.so) dest_dir="$dest_unix" ;;
-            *)    dest_dir="$dest_win" ;;
-        esac
-        if [ ! -f "$dest_dir/$f" ]; then
-            dbg "install_patched_dlls: expected $dest_dir/$f is missing"
-            rm -rf "$workdir"
-            return 1
-        fi
-        if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
-            dbg "install_patched_dlls: backup of $f FAILED"
-            rm -rf "$workdir"
-            return 1
-        fi
-        chmod u+w "$dest_dir/$f"
-        mv "$workdir/$f" "$dest_dir/$f"
-        chmod 0644 "$dest_dir/$f"
-        dbg "install_patched_dlls: installed $f"
-    done
-
+    install_dlls_from_archive "$proton_dir" "$workdir/$DLL_ARCHIVE_NAME"
+    rc=$?
     rm -rf "$workdir"
+    [ "$rc" -eq 0 ] || return "$rc"
     dbg "install_patched_dlls: exit success"
 }
 
@@ -882,6 +854,19 @@ run_in_prefix() {
     return "$rc"
 }
 
+# register_media_handlers proton_dir prefix_path
+register_media_handlers() {
+    dbg "register_media_handlers: enter proton_dir=[$1] prefix_path=[$2]"
+    local proton_dir="$1" prefix_path="$2"
+
+    echo "Registering media handlers..."
+    if run_in_prefix "$proton_dir" "$prefix_path" regsvr32 /s winedmo.dll >/dev/null 2>&1; then
+        dbg "register_media_handlers: exit success"
+    else
+        dbg "register_media_handlers: regsvr32 FAILED, continuing"
+    fi
+}
+
 show_installer_tips() {
     dbg "show_installer_tips: enter"
     ui_msg "Continue in the Somnium Space Installer" "The Somnium Space Installer window is about to open. Please continue there.
@@ -927,6 +912,7 @@ LAUNCHER="$launcher_path"
 LAUNCH_LOG="$LAUNCH_LOG"
 OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
 GAME_ID="umu-somnium"
+YTDLP_EXTRACTOR_ARGS="youtube:player_client=android"
 EOF
 
     cat >> "$LAUNCH_SCRIPT.tmp" <<'SOMNILUX_LAUNCH_BODY'
@@ -1231,6 +1217,7 @@ LAUNCH_CMD=(env
     PROTONPATH="$PROTON_DIR"
     WINEPREFIX="$PREFIX_PATH"
     GAMEID="$GAME_ID"
+    PROTON_YTDLP_EXTRACTOR_ARGS="$YTDLP_EXTRACTOR_ARGS"
     ${OPENXR_ENV[@]+"${OPENXR_ENV[@]}"}
     "$UMU_RUN" "$LAUNCHER")
 
@@ -1353,6 +1340,8 @@ main() {
             download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
             setup_proton_and_dlls "$proton_version" "$proton_dir"
+            dbg "main: calling register_media_handlers"
+            register_media_handlers "$proton_dir" "$prefix"
             dbg "main: calling create_launch_script"
             create_launch_script "$prefix" "$proton_dir"
             dbg "main: calling create_desktop_entry"
