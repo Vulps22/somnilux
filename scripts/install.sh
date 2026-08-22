@@ -29,6 +29,43 @@ UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
+PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
+CACHED_PREFIX=""
+CACHED_PROTON=""
+
+# Parsed by hand rather than sourced -- this file records paths, and a stray
+# line in it should not become something this script executes.
+cache_load() {
+    local key value
+    [ -r "$PATHS_CACHE" ] || { dbg "cache_load: no cache at $PATHS_CACHE"; return 1; }
+    while IFS='=' read -r key value; do
+        case "$key" in
+            prefix) CACHED_PREFIX="$value" ;;
+            proton) CACHED_PROTON="$value" ;;
+        esac
+    done < "$PATHS_CACHE"
+    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON]"
+    [ -n "$CACHED_PREFIX" ]
+}
+
+# cache_save prefix proton
+cache_save() {
+    local prefix="$1" proton="$2"
+    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ]; then
+        dbg "cache_save: unchanged, not rewriting"
+        return 0
+    fi
+    mkdir -p "$(dirname "$PATHS_CACHE")" || return 0
+    if printf 'prefix=%s\nproton=%s\n' "$prefix" "$proton" > "$PATHS_CACHE.tmp" 2>/dev/null &&
+       mv "$PATHS_CACHE.tmp" "$PATHS_CACHE" 2>/dev/null; then
+        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton]"
+        CACHED_PREFIX="$prefix"
+        CACHED_PROTON="$proton"
+    else
+        dbg "cache_save: could not write $PATHS_CACHE, continuing anyway"
+        rm -f "$PATHS_CACHE.tmp" 2>/dev/null || true
+    fi
+}
 
 usage() {
     cat <<'EOF'
@@ -288,9 +325,15 @@ pick_proton_version() {
 main_menu() {
     local -n __mm_out="$1"
     dbg "main_menu: enter"
+    local __mm_second
+    if [ -n "$CACHED_PREFIX" ]; then
+        __mm_second="Repair an existing install"
+    else
+        __mm_second="Configure an existing installation"
+    fi
     ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" \
         "install" "Install Somnium Space" \
-        "repair" "Repair an existing install"
+        "repair" "$__mm_second"
     dbg "main_menu: exit"
 }
 
@@ -306,6 +349,12 @@ repair_flow() {
     local -n __rf_out="$1"
     dbg "repair_flow: enter"
 
+    if [ -n "$CACHED_PREFIX" ] && [ -f "$CACHED_PREFIX/$LAUNCHER_REL_PATH" ]; then
+        dbg "repair_flow: using remembered location"
+        __rf_out="$CACHED_PREFIX"
+        return
+    fi
+
     if default_prefix_has_somnium; then
         dbg "repair_flow: found at default location"
         __rf_out="$DEFAULT_PREFIX"
@@ -318,7 +367,7 @@ repair_flow() {
     local __rf_path
     while true; do
         dbg "repair_flow: asking for manual path"
-        ui_input __rf_path "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+        ui_input __rf_path "Install location" "Enter the path to your existing Somnium install location" "${CACHED_PREFIX:-}"
         expand_path __rf_path "$__rf_path"
         dbg "repair_flow: got path=[$__rf_path]"
 
@@ -327,11 +376,11 @@ repair_flow() {
         fi
 
         dbg "repair_flow: path invalid, re-prompting"
-        ui_msg "Not a Somnium prefix" "Couldn't find the Somnium Space Launcher inside:
+        ui_msg "Not a Somnium install location" "Couldn't find the Somnium Space Launcher inside:
 
   ${__rf_path:-(nothing entered)}
 
-Expected it at <prefix>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
+Expected it at <install location>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
     done
 
     __rf_out="$__rf_path"
@@ -393,7 +442,7 @@ install_flow() {
         exit 1
     fi
 
-    ui_input __if_prefix "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX"
+    ui_input __if_prefix "Install location" "Where should Somnium be installed?" "${CACHED_PREFIX:-$DEFAULT_PREFIX}"
     expand_path __if_prefix "$__if_prefix"
     dbg "install_flow: prefix_path=[$__if_prefix]"
 
@@ -851,7 +900,7 @@ create_prefix_and_run_installer() {
 
     mkdir -p "$prefix_path"
     show_installer_tips
-    echo "Creating the prefix and launching the Somnium installer..."
+    echo "Creating the install location and launching the Somnium installer..."
     run_in_prefix "$proton_dir" "$prefix_path" "$installer_path"
     dbg "create_prefix_and_run_installer: exit"
 }
@@ -914,6 +963,7 @@ main() {
     dbg "main: enter"
     local mode
     check_dependencies
+    cache_load || true
     main_menu mode
     dbg "main: mode=[$mode]"
 
@@ -934,6 +984,7 @@ main() {
             create_prefix_and_run_installer "$installer_path" "$prefix_path" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix_path" "$proton_dir"
+            cache_save "$prefix_path" "$proton_dir"
 
             ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: install branch done"
@@ -957,6 +1008,7 @@ main() {
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix" "$proton_dir"
+            cache_save "$prefix" "$proton_dir"
 
             ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: repair branch done"
