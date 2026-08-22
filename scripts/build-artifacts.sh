@@ -213,8 +213,9 @@ verify() {
 
         if [ -n "$missing" ]; then
             warn "$name: missing vs Proton: $missing"
-            info "  a capability Proton's build has and ours does not -- install the"
-            info "  matching -devel package and rebuild, or accept losing it"
+            info "  Proton's build has this and ours does not. Install the matching"
+            info "  -devel package, delete the ffmpeg ffbuild/config.mak so configure"
+            info "  re-runs, and build again."
             FAILED=1
         fi
         [ -n "$extra" ] && info "$name: gained $extra"
