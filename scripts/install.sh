@@ -133,21 +133,26 @@ if command -v whiptail >/dev/null 2>&1; then
 fi
 dbg "top-level: HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
 
-# ui_menu outvar title prompt tag1 text1 [tag2 text2 ...]
+# ui_menu outvar title prompt notags tag1 text1 [tag2 text2 ...]
 # Writes the chosen tag into the caller's outvar. No subshell, no
 # dependence on the caller's own stdout/pipe context.
+# notags=1 hides the tag, for menus whose tags are internal values rather
+# than something worth showing. Menus whose tag *is* the label pass 0.
 ui_menu() {
     local -n __um_out="$1"
     shift
-    local __um_title="$1" __um_prompt="$2"
-    shift 2
+    local __um_title="$1" __um_prompt="$2" __um_notags="$3"
+    shift 3
     dbg "ui_menu: enter title=[$__um_title]"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         dbg "ui_menu: calling whiptail --menu"
         local __um_rc=0
-        __um_out=$(whiptail --backtitle "$BACKTITLE" --title "$__um_title" --menu "$__um_prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || __um_rc=$?
+        local __um_flags=()
+        [ "$__um_notags" = "1" ] && __um_flags+=(--notags)
+        __um_out=$(whiptail --backtitle "$BACKTITLE" --title "$__um_title" \
+            "${__um_flags[@]}" --menu "$__um_prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || __um_rc=$?
         dbg "ui_menu: whiptail --menu returned rc=$__um_rc out=[$__um_out]"
         return "$__um_rc"
     fi
@@ -160,7 +165,9 @@ ui_menu() {
         __um_tag="$1"
         __um_text="$2"
         __um_tags+=("$__um_tag")
-        if [ -n "$__um_text" ]; then
+        if [ "$__um_notags" = "1" ] && [ -n "$__um_text" ]; then
+            echo "  $__um_i) $__um_text" >&2
+        elif [ -n "$__um_text" ]; then
             echo "  $__um_i) $__um_tag $__um_text" >&2
         else
             echo "  $__um_i) $__um_tag" >&2
@@ -321,7 +328,7 @@ pick_proton_version() {
             "${__pv_menu_args[@]}" 3>&1 1>&2 2>&3) || __pv_rc=$?
         dbg "pick_proton_version: whiptail --menu returned rc=$__pv_rc choice=[$__pv_choice]"
     else
-        ui_menu __pv_choice "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${__pv_menu_args[@]}"
+        ui_menu __pv_choice "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" 0 "${__pv_menu_args[@]}"
     fi
 
     if [ "$__pv_choice" != "$DEFAULT_PROTON_VERSION" ]; then
@@ -344,7 +351,7 @@ main_menu() {
     else
         __mm_second="Configure an existing installation"
     fi
-    ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" \
+    ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" 1 \
         "install" "Install Somnium Space" \
         "repair" "$__mm_second"
     dbg "main_menu: exit"
