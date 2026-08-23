@@ -108,6 +108,11 @@ somnilux installer
 
   install.sh [--use-local-dlls-at <archive>]
 
+  -v, --version
+        Print this installer's version as major.minor, and exit. The release
+        workflow reads it from the published script so supported/script.txt
+        cannot disagree with what shipped.
+
   --supported-format
         Print the archive format this installer can install, and exit. Used by
         scripts/build-artifacts.sh so the number lives in one place.
@@ -147,6 +152,11 @@ parse_args() {
                 # stdout, which would corrupt this for a caller parsing it.
                 trap - EXIT
                 printf '%s\n' "$ARCHIVE_FORMAT"
+                exit 0
+                ;;
+            -v|--version)
+                trap - EXIT
+                printf '%s\n' "$SCRIPT_VERSION"
                 exit 0
                 ;;
             --force-outdated-fixes)
