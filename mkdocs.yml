@@ -1,0 +1,75 @@
+site_name: Somnilux
+site_description: Somnium Space on Linux
+site_url: https://vulps22.github.io/somnilux/
+repo_url: https://github.com/Vulps22/somnilux
+repo_name: Vulps22/somnilux
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Installation:
+      - Installing: install/installing.md
+      - Installer options: install/options.md
+      - Updating: install/updating.md
+      - Uninstalling: install/uninstalling.md
+  - Running:
+      - The launch window: run/launch-window.md
+      - VR runtimes and headsets: run/vr-runtimes.md
+      - Video playback: run/video.md
+      - Restarting: run/restarting.md
+  - Troubleshooting:
+      - Reading launch.log: troubleshooting/launch-log.md
+      - Common failures: troubleshooting/common-failures.md
+      - Distribution notes: troubleshooting/distributions.md
+      - Known issues: troubleshooting/known-issues.md
+      - Reporting a problem: troubleshooting/reporting.md
+  - Understanding:
+      - What's fixed and why: understanding/whats-fixed.md
+      - What the installer does: understanding/what-the-installer-does.md
+      - Layout on disk: understanding/layout.md
+      - Licensing: understanding/licensing.md
+  - Contributing:
+      - Building from source: contributing/building.md
+      - Archive format: contributing/archive-format.md
+      - Release process: contributing/release-process.md
+      - Testing a build: contributing/testing.md
