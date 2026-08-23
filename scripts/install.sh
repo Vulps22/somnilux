@@ -17,10 +17,7 @@ PROJECT_URL="https://github.com/Vulps22/somnilux"
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 CURL_TIMEOUT_OPTS=(--connect-timeout 10 --max-time 30)
 CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
-# TEMPORARY -- revert to .../main/supported before release. Points everything
-# that reads supported/ at this branch, so releases can be faked there without
-# publishing any.
-SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/add-launch-update-check/supported"
+SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
 DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
