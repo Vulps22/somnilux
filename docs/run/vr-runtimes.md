@@ -3,8 +3,17 @@
 Somnilux works out which OpenXR runtime is active **every time you start the
 game**, and makes it reachable from inside the container umu runs Somnium in.
 
-Switching runtime needs no reinstall and no configuration. Set your runtime
-active the usual way and start Somnium again.
+!!! warning "Connect your headset before you launch"
+    Detection happens once, at the moment you start Somnium. Your headset
+    needs to be connected and your runtime already running **before** you
+    launch — bring it up afterwards and detection will more often than not
+    have already failed.
+
+    If you forget, close Somnium, start your runtime, and launch again.
+    Nothing needs reinstalling or reconfiguring.
+
+Switching runtime needs no reinstall and no configuration. Bring your runtime
+up the usual way and start Somnium again.
 
 The detected runtime is printed in [the launch window](launch-window.md):
 

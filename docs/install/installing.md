@@ -124,6 +124,11 @@ You'll get a "Done" dialog, and **Somnium Space** appears in your applications
 menu. Launching it opens a terminal window showing what it's doing — see
 [The launch window](../run/launch-window.md).
 
+!!! warning "Connect your headset before that first launch"
+    Somnilux detects your OpenXR runtime at the moment you start Somnium, so
+    have your headset connected and your runtime running **first**. Starting
+    them afterwards is the most common reason detection fails.
+
 If the menu entry seems to do nothing at all, the answer is almost always in:
 
 ```

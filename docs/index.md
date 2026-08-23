@@ -31,7 +31,11 @@ chmod +x install.sh
 repairs an existing one. See [Installing](install/installing.md) if you want
 to know what each step is doing.
 
-**4. Launch Somnium** from your desktop's start menu. A terminal window opens
+**4. Connect your headset and start your VR runtime first.** Somnilux detects
+your OpenXR runtime at the moment you launch, so it has to be up and running
+*before* you start Somnium — not after.
+
+**5. Launch Somnium** from your desktop's start menu. A terminal window opens
 showing which OpenXR runtime was detected — you can
 [safely close it](run/launch-window.md).
 
