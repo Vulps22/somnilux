@@ -20,6 +20,9 @@ DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
 ICON_DEST_DIR="$HOME/.local/share/somnilux"
+LAUNCH_SCRIPT="$HOME/.local/share/somnilux/launch.sh"
+LAUNCH_LOG="$HOME/.local/share/somnilux/launch.log"
+OPENXR_OVERRIDE_CONF="$HOME/.local/share/somnilux/openxr.conf"
 DLL_RELEASE_BASE_URL="https://github.com/Vulps22/somnilux/releases/download"
 UMU_VERSION="1.4.4"
 UMU_SHA256="eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"
@@ -28,6 +31,131 @@ UMU_DEST="$HOME/.local/share/somnilux/umu"
 UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
+LOCAL_DLL_ARCHIVE=""
+FORCE_OUTDATED=0
+DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
+DLL_RELEASE_TAG=""
+# The archive format this script speaks. Each line of supported/compat.txt is
+# "format:tag" for one binary release; we install the newest build matching
+# this number exactly. Not the newest we are "at least" -- a later format may
+# lay the archive out in a way this code would install wrongly, and an older
+# one may need handling this code has dropped.
+#
+# Bump when an installer of the previous number would get it wrong: a new
+# top-level directory, a different archive type, a required step this code
+# does not perform. More files inside an existing directory need no bump.
+ARCHIVE_FORMAT=2
+ARCHIVE_DIRS=(x86_64-unix x86_64-windows x86_64-linux-gnu)
+PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
+CACHED_PREFIX=""
+CACHED_PROTON=""
+
+# Parsed by hand rather than sourced -- this file records paths, and a stray
+# line in it should not become something this script executes.
+cache_load() {
+    local key value
+    [ -r "$PATHS_CACHE" ] || { dbg "cache_load: no cache at $PATHS_CACHE"; return 1; }
+    while IFS='=' read -r key value; do
+        case "$key" in
+            prefix) CACHED_PREFIX="$value" ;;
+            proton) CACHED_PROTON="$value" ;;
+        esac
+    done < "$PATHS_CACHE"
+    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON]"
+    [ -n "$CACHED_PREFIX" ]
+}
+
+# cache_save prefix proton
+cache_save() {
+    local prefix="$1" proton="$2"
+    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ]; then
+        dbg "cache_save: unchanged, not rewriting"
+        return 0
+    fi
+    mkdir -p "$(dirname "$PATHS_CACHE")" || return 0
+    if printf 'prefix=%s\nproton=%s\n' "$prefix" "$proton" > "$PATHS_CACHE.tmp" 2>/dev/null &&
+       mv "$PATHS_CACHE.tmp" "$PATHS_CACHE" 2>/dev/null; then
+        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton]"
+        CACHED_PREFIX="$prefix"
+        CACHED_PROTON="$proton"
+    else
+        dbg "cache_save: could not write $PATHS_CACHE, continuing anyway"
+        rm -f "$PATHS_CACHE.tmp" 2>/dev/null || true
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+somnilux installer
+
+  install.sh [--use-local-dlls-at <archive>]
+
+  --supported-format
+        Print the archive format this installer can install, and exit. Used by
+        scripts/build-artifacts.sh so the number lives in one place.
+
+  --force-outdated-fixes
+        Skip the warning shown when newer fixes exist that this installer is
+        too old to install. It still installs the newest fixes it can use.
+
+  --use-local-dlls-at <archive>
+        Install the patched binaries from a local .tar.gz instead of
+        downloading them from the release. The archive is the one produced by
+        scripts/build-artifacts.sh, laid out by destination:
+
+            x86_64-unix/       -> files/lib/wine/x86_64-unix/
+            x86_64-windows/    -> files/lib/wine/x86_64-windows/
+            x86_64-linux-gnu/  -> files/lib/x86_64-linux-gnu/
+
+        For testing a build before it is released. Everything else about the
+        install is unchanged.
+EOF
+}
+
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --use-local-dlls-at)
+                [ $# -ge 2 ] || { echo "--use-local-dlls-at needs a path" >&2; exit 1; }
+                LOCAL_DLL_ARCHIVE="$2"
+                shift 2
+                ;;
+            --use-local-dlls-at=*)
+                LOCAL_DLL_ARCHIVE="${1#*=}"
+                shift
+                ;;
+            --supported-format)
+                # The EXIT trap restores the terminal by writing escapes to
+                # stdout, which would corrupt this for a caller parsing it.
+                trap - EXIT
+                printf '%s\n' "$ARCHIVE_FORMAT"
+                exit 0
+                ;;
+            --force-outdated-fixes)
+                FORCE_OUTDATED=1
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                usage >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        if [ ! -f "$LOCAL_DLL_ARCHIVE" ]; then
+            echo "No such archive: $LOCAL_DLL_ARCHIVE" >&2
+            exit 1
+        fi
+        LOCAL_DLL_ARCHIVE=$(readlink -f "$LOCAL_DLL_ARCHIVE")
+    fi
+    dbg "parse_args: LOCAL_DLL_ARCHIVE=[$LOCAL_DLL_ARCHIVE]"
+}
 
 dbg "top-level: checking for whiptail"
 HAVE_WHIPTAIL=0
@@ -36,21 +164,26 @@ if command -v whiptail >/dev/null 2>&1; then
 fi
 dbg "top-level: HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
 
-# ui_menu outvar title prompt tag1 text1 [tag2 text2 ...]
+# ui_menu outvar title prompt notags tag1 text1 [tag2 text2 ...]
 # Writes the chosen tag into the caller's outvar. No subshell, no
 # dependence on the caller's own stdout/pipe context.
+# notags=1 hides the tag, for menus whose tags are internal values rather
+# than something worth showing. Menus whose tag *is* the label pass 0.
 ui_menu() {
     local -n __um_out="$1"
     shift
-    local __um_title="$1" __um_prompt="$2"
-    shift 2
+    local __um_title="$1" __um_prompt="$2" __um_notags="$3"
+    shift 3
     dbg "ui_menu: enter title=[$__um_title]"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
         dbg "ui_menu: calling whiptail --menu"
         local __um_rc=0
-        __um_out=$(whiptail --backtitle "$BACKTITLE" --title "$__um_title" --menu "$__um_prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || __um_rc=$?
+        local __um_flags=()
+        [ "$__um_notags" = "1" ] && __um_flags+=(--notags)
+        __um_out=$(whiptail --backtitle "$BACKTITLE" --title "$__um_title" \
+            "${__um_flags[@]}" --menu "$__um_prompt" 20 78 10 "$@" 3>&1 1>&2 2>&3) || __um_rc=$?
         dbg "ui_menu: whiptail --menu returned rc=$__um_rc out=[$__um_out]"
         return "$__um_rc"
     fi
@@ -63,7 +196,9 @@ ui_menu() {
         __um_tag="$1"
         __um_text="$2"
         __um_tags+=("$__um_tag")
-        if [ -n "$__um_text" ]; then
+        if [ "$__um_notags" = "1" ] && [ -n "$__um_text" ]; then
+            echo "  $__um_i) $__um_text" >&2
+        elif [ -n "$__um_text" ]; then
             echo "  $__um_i) $__um_tag $__um_text" >&2
         else
             echo "  $__um_i) $__um_tag" >&2
@@ -168,7 +303,7 @@ Somnium Space would install but the launcher would silently fail to start. Pleas
 # Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
-    local proton_txt default_txt
+    local proton_txt default_txt compat_txt
 
     dbg "fetch_supported_versions: curl proton.txt starting"
     if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
@@ -185,6 +320,49 @@ fetch_supported_versions() {
         exit 1
     fi
     dbg "fetch_supported_versions: curl default.txt done, got [$default_txt]"
+
+    # compat.txt names the binary release for each archive format, one
+    # "format:tag" per line. A build that changes the format adds a line and
+    # merges to main with its release, so the pairing ships together.
+    dbg "fetch_supported_versions: curl compat.txt starting"
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        # compat.txt only decides which release to download. We are not
+        # downloading one; the archive's own stamp is what gets checked.
+        dbg "fetch_supported_versions: local archive given, skipping compat.txt"
+    elif compat_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/compat.txt"); then
+        local fmt tag newest=0
+        while IFS=: read -r fmt tag; do
+            case "$fmt" in ''|\#*|*[!0-9]*) continue ;; esac
+            [ -n "$tag" ] || continue
+            newest="$fmt"
+            [ "$fmt" -eq "$ARCHIVE_FORMAT" ] && DLL_RELEASE_TAG="$tag"
+        done <<< "$compat_txt"
+        dbg "fetch_supported_versions: ARCHIVE_FORMAT=$ARCHIVE_FORMAT tag=[$DLL_RELEASE_TAG] newest_offered=$newest"
+
+        if [ -z "$DLL_RELEASE_TAG" ]; then
+            dbg "fetch_supported_versions: no build matches format $ARCHIVE_FORMAT"
+            ui_msg "No compatible fixes found" "This installer needs patched binaries in format $ARCHIVE_FORMAT, and none are published.
+
+That is almost certainly a mistake on our side rather than anything you have done. Please report it so it can be fixed:
+
+  https://github.com/Vulps22/somnilux/issues/new/choose"
+            exit 1
+        fi
+
+        if [ "$newest" -gt "$ARCHIVE_FORMAT" ] && [ "$FORCE_OUTDATED" -eq 0 ]; then
+            ui_msg "Update needed" "Newer fixes have been published that this installer is too old to install.
+
+It will carry on with the newest fixes it can use, but you are missing later ones. Download a newer installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+        fi
+    else
+        dbg "fetch_supported_versions: curl compat.txt FAILED"
+        ui_msg "Cannot reach GitHub" "The list of published fixes could not be downloaded, so this installer cannot tell which ones it should install.
+
+Check your internet connection and try again. Nothing has been changed."
+        exit 1
+    fi
 
     mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
     DEFAULT_PROTON_VERSION=$(sed -n '1p' <<< "$default_txt")
@@ -216,7 +394,7 @@ pick_proton_version() {
             "${__pv_menu_args[@]}" 3>&1 1>&2 2>&3) || __pv_rc=$?
         dbg "pick_proton_version: whiptail --menu returned rc=$__pv_rc choice=[$__pv_choice]"
     else
-        ui_menu __pv_choice "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" "${__pv_menu_args[@]}"
+        ui_menu __pv_choice "Choose a Proton version" "Recommended: $DEFAULT_PROTON_VERSION" 0 "${__pv_menu_args[@]}"
     fi
 
     if [ "$__pv_choice" != "$DEFAULT_PROTON_VERSION" ]; then
@@ -233,10 +411,93 @@ pick_proton_version() {
 main_menu() {
     local -n __mm_out="$1"
     dbg "main_menu: enter"
-    ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" \
+    local __mm_second
+    if [ -n "$CACHED_PREFIX" ]; then
+        __mm_second="Repair an existing install"
+    else
+        __mm_second="Configure an existing installation"
+    fi
+    ui_menu __mm_out "somnilux" "Set up Somnium Space on Linux" 1 \
         "install" "Install Somnium Space" \
-        "repair" "Repair an existing install"
+        "repair" "$__mm_second"
     dbg "main_menu: exit"
+}
+
+# Our own process tree, so a pattern match does not find this script.
+installer_pids() {
+    local pid=$$ depth=0 stat rest
+    while [ "$pid" -gt 1 ] && [ "$depth" -lt 64 ]; do
+        printf '%s\n' "$pid"
+        read -r _ rest < "/proc/$pid/stat" 2>/dev/null || break
+        rest=${rest#*) }
+        pid=$(printf '%s' "$rest" | cut -d' ' -f2)
+        [ -n "$pid" ] || break
+        depth=$((depth + 1))
+    done
+}
+
+# Anything holding the Wine prefix or the Proton tree open. Replacing files
+# underneath a running Wine corrupts the session, and any Wine command we run
+# would block behind the existing wineserver rather than starting.
+running_somnium_pids() {
+    local pid cmd mine
+    mine=" $(installer_pids | tr '\n' ' ') "
+    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+        case "$mine" in *" $pid "*) continue ;; esac
+        cmd=$({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null) || continue
+        [ -n "$cmd" ] || continue
+        case "$cmd" in
+            *"Somnium Space"*|*umu-somnium*|*-somnilux/files/*)
+                printf '%s\n' "$pid" ;;
+        esac
+    done
+}
+
+# Asks, then stops them. No countdown -- the installer cannot proceed either
+# way, so there is nothing to time out into.
+stop_running_somnium() {
+    dbg "stop_running_somnium: enter"
+    local pids waited
+    pids=$(running_somnium_pids | tr '\n' ' ')
+    pids="${pids% }"
+    if [ -z "$pids" ]; then
+        dbg "stop_running_somnium: nothing running"
+        return 0
+    fi
+    dbg "stop_running_somnium: found [$pids]"
+
+    ui_msg "Somnium Space is running" "Somnium Space is running. The installer cannot change files it is using, and any Wine command it runs would wait for that session to end.
+
+Press Enter to close Somnium Space and continue with the install.
+
+Processes: $pids"
+
+    echo "Closing Somnium Space..."
+    kill -TERM $pids 2>/dev/null || true
+    waited=0
+    while [ "$waited" -lt 20 ]; do
+        sleep 0.5
+        pids=$(running_somnium_pids | tr '\n' ' ')
+        pids="${pids% }"
+        if [ -z "$pids" ]; then
+            dbg "stop_running_somnium: stopped cleanly"
+            return 0
+        fi
+        waited=$((waited + 1))
+    done
+
+    dbg "stop_running_somnium: still up after 10s, forcing [$pids]"
+    kill -KILL $pids 2>/dev/null || true
+    sleep 1
+    pids=$(running_somnium_pids | tr '\n' ' ')
+    if [ -n "${pids// /}" ]; then
+        dbg "stop_running_somnium: survived SIGKILL [$pids]"
+        ui_msg "Could not close Somnium Space" "These processes did not stop: $pids
+
+Close them yourself, or log out and back in, then run the installer again."
+        exit 1
+    fi
+    dbg "stop_running_somnium: exit success"
 }
 
 # 0 if the default prefix exists and has Somnium installed in it, 1 otherwise.
@@ -251,6 +512,12 @@ repair_flow() {
     local -n __rf_out="$1"
     dbg "repair_flow: enter"
 
+    if [ -n "$CACHED_PREFIX" ] && [ -f "$CACHED_PREFIX/$LAUNCHER_REL_PATH" ]; then
+        dbg "repair_flow: using remembered location"
+        __rf_out="$CACHED_PREFIX"
+        return
+    fi
+
     if default_prefix_has_somnium; then
         dbg "repair_flow: found at default location"
         __rf_out="$DEFAULT_PREFIX"
@@ -263,7 +530,7 @@ repair_flow() {
     local __rf_path
     while true; do
         dbg "repair_flow: asking for manual path"
-        ui_input __rf_path "Existing prefix" "Enter the path to your existing Somnium prefix" ""
+        ui_input __rf_path "Install location" "Enter the path to your existing Somnium install location" "${CACHED_PREFIX:-}"
         expand_path __rf_path "$__rf_path"
         dbg "repair_flow: got path=[$__rf_path]"
 
@@ -272,11 +539,11 @@ repair_flow() {
         fi
 
         dbg "repair_flow: path invalid, re-prompting"
-        ui_msg "Not a Somnium prefix" "Couldn't find the Somnium Space Launcher inside:
+        ui_msg "Not a Somnium install location" "Couldn't find the Somnium Space Launcher inside:
 
   ${__rf_path:-(nothing entered)}
 
-Expected it at <prefix>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
+Expected it at <install location>/$LAUNCHER_REL_PATH. Check the path and try again, or cancel to quit."
     done
 
     __rf_out="$__rf_path"
@@ -318,7 +585,11 @@ find_proton_dir_for_prefix() {
 # Expands a leading ~ to $HOME into outvar.
 expand_path() {
     local -n __ep_out="$1"
-    __ep_out="${2/#\~/$HOME}"
+    local __ep_path="${2/#\~/$HOME}"
+    while [ "$__ep_path" != "/" ] && [ "${__ep_path%/}" != "$__ep_path" ]; do
+        __ep_path="${__ep_path%/}"
+    done
+    __ep_out="$__ep_path"
 }
 
 # install_flow installer_path_var prefix_path_var proton_version_var proton_dir_var
@@ -338,7 +609,7 @@ install_flow() {
         exit 1
     fi
 
-    ui_input __if_prefix "Prefix location" "Where should Somnium be installed?" "$DEFAULT_PREFIX"
+    ui_input __if_prefix "Install location" "Where should Somnium be installed?" "${CACHED_PREFIX:-$DEFAULT_PREFIX}"
     expand_path __if_prefix "$__if_prefix"
     dbg "install_flow: prefix_path=[$__if_prefix]"
 
@@ -473,56 +744,137 @@ download_umu() {
     dbg "download_umu: exit, vendored to $UMU_RUN_BIN"
 }
 
-# install_patched_dlls proton_dir
-# Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
-install_patched_dlls() {
-    dbg "install_patched_dlls: enter proton_dir=[$1]"
-    local proton_dir="$1"
-    local release_url="$DLL_RELEASE_BASE_URL/wine-$DEFAULT_WINE_VERSION"
-    local dest_unix="$proton_dir/files/lib/wine/x86_64-unix"
-    local dest_win="$proton_dir/files/lib/wine/x86_64-windows"
-    local all_files=(secur32.so crypt32.so secur32.dll crypt32.dll rsaenh.dll)
-    local workdir f dest_dir
+# install_one_dll src proton_dir arch_dir
+# arch_dir is the archive's top-level directory, which names the destination.
+install_one_dll() {
+    local src="$1" proton_dir="$2" arch_dir="$3" dest_dir f
+    f=$(basename "$src")
+
+    case "$arch_dir" in
+        x86_64-unix)      dest_dir="$proton_dir/files/lib/wine/x86_64-unix" ;;
+        x86_64-windows)   dest_dir="$proton_dir/files/lib/wine/x86_64-windows" ;;
+        x86_64-linux-gnu) dest_dir="$proton_dir/files/lib/x86_64-linux-gnu" ;;
+        *) dbg "install_one_dll: unknown archive directory [$arch_dir]"; return 1 ;;
+    esac
+
+    if [ ! -f "$dest_dir/$f" ]; then
+        dbg "install_one_dll: expected $dest_dir/$f is missing"
+        return 1
+    fi
+    if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
+        dbg "install_one_dll: backup of $f FAILED"
+        return 1
+    fi
+    chmod u+w "$dest_dir/$f"
+    cp -f "$src" "$dest_dir/$f" || return 1
+    chmod 0644 "$dest_dir/$f"
+    dbg "install_one_dll: installed $arch_dir/$f"
+}
+
+# install_dlls_from_archive proton_dir archive
+install_dlls_from_archive() {
+    dbg "install_dlls_from_archive: enter proton_dir=[$1] archive=[$2]"
+    local proton_dir="$1" archive="$2"
+    local workdir found=0 d f
+
+    echo "Installing patched binaries from $(basename "$archive")..."
+
     workdir=$(mktemp -d)
+    if ! tar -xzf "$archive" -C "$workdir" 2>/dev/null; then
+        dbg "install_dlls_from_archive: extract FAILED"
+        rm -rf "$workdir"
+        ui_msg "Error" "Could not extract $archive. It should be the .tar.gz produced by scripts/build-artifacts.sh."
+        return 1
+    fi
 
-    echo "Installing patched DLLs (Wine $DEFAULT_WINE_VERSION build)..."
+    local archive_format=""
+    [ -r "$workdir/archive-format.txt" ] && archive_format=$(sed -n '1p' "$workdir/archive-format.txt" | tr -d '[:space:]')
+    dbg "install_dlls_from_archive: archive_format=[$archive_format] ours=$ARCHIVE_FORMAT"
 
-    for f in "${all_files[@]}"; do
-        dbg "install_patched_dlls: downloading $f"
-        if ! curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$workdir/$f" "$release_url/$f"; then
-            dbg "install_patched_dlls: download of $f FAILED"
-            rm -rf "$workdir"
-            return 1
-        fi
-        if [ ! -s "$workdir/$f" ]; then
-            dbg "install_patched_dlls: $f downloaded empty"
-            rm -rf "$workdir"
-            return 1
-        fi
+    if [ -z "$archive_format" ]; then
+        rm -rf "$workdir"
+        ui_msg "Error" "This archive does not say what format it is, so it is older than this installer can safely use.
+
+Download the fixes through the installer normally, or fetch a current archive."
+        return 1
+    fi
+
+    if [ "$archive_format" != "$ARCHIVE_FORMAT" ]; then
+        rm -rf "$workdir"
+        ui_msg "Incompatible fixes" "These fixes are format $archive_format and this installer handles format $ARCHIVE_FORMAT.
+
+Installing them would put files in the wrong place or miss some entirely, so nothing has been changed.
+
+Get an installer matching the fixes, or fixes matching the installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+        return 1
+    fi
+
+    for d in "$workdir"/*/; do
+        d=$(basename "$d")
+        case " ${ARCHIVE_DIRS[*]} " in
+            *" $d "*) ;;
+            *)
+                dbg "install_dlls_from_archive: unknown directory [$d]"
+                rm -rf "$workdir"
+                ui_msg "Error" "This archive contains '$d', which this installer does not know how to install. Download a newer installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+                return 1
+                ;;
+        esac
     done
 
-    for f in "${all_files[@]}"; do
-        case "$f" in
-            *.so) dest_dir="$dest_unix" ;;
-            *)    dest_dir="$dest_win" ;;
-        esac
-        if [ ! -f "$dest_dir/$f" ]; then
-            dbg "install_patched_dlls: expected $dest_dir/$f is missing"
-            rm -rf "$workdir"
-            return 1
-        fi
-        if [ ! -f "$dest_dir/$f.orig" ] && ! cp -a "$dest_dir/$f" "$dest_dir/$f.orig"; then
-            dbg "install_patched_dlls: backup of $f FAILED"
-            rm -rf "$workdir"
-            return 1
-        fi
-        chmod u+w "$dest_dir/$f"
-        mv "$workdir/$f" "$dest_dir/$f"
-        chmod 0644 "$dest_dir/$f"
-        dbg "install_patched_dlls: installed $f"
+    for d in "${ARCHIVE_DIRS[@]}"; do
+        [ -d "$workdir/$d" ] || continue
+        for f in "$workdir/$d"/*; do
+            [ -f "$f" ] || continue
+            if ! install_one_dll "$f" "$proton_dir" "$d"; then
+                rm -rf "$workdir"
+                return 1
+            fi
+            found=$((found + 1))
+        done
     done
 
     rm -rf "$workdir"
+    if [ "$found" -eq 0 ]; then
+        dbg "install_dlls_from_archive: archive contained nothing installable"
+        ui_msg "Error" "$archive contains none of the expected directories (x86_64-unix, x86_64-windows, x86_64-linux-gnu)."
+        return 1
+    fi
+    echo "Installed $found file(s)."
+    dbg "install_dlls_from_archive: exit success, $found file(s)"
+}
+
+# install_patched_dlls proton_dir
+# Requires DLL_RELEASE_TAG to already be set (fetch_supported_versions).
+install_patched_dlls() {
+    dbg "install_patched_dlls: enter proton_dir=[$1]"
+    local proton_dir="$1"
+
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        install_dlls_from_archive "$proton_dir" "$LOCAL_DLL_ARCHIVE"
+        return $?
+    fi
+
+    local release_url="$DLL_RELEASE_BASE_URL/$DLL_RELEASE_TAG"
+    local workdir rc
+    workdir=$(mktemp -d)
+
+    echo "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
+    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" \
+              -o "$workdir/$DLL_ARCHIVE_NAME" "$release_url/$DLL_ARCHIVE_NAME"; then
+        dbg "install_patched_dlls: download of $DLL_ARCHIVE_NAME FAILED"
+        rm -rf "$workdir"
+        return 1
+    fi
+
+    install_dlls_from_archive "$proton_dir" "$workdir/$DLL_ARCHIVE_NAME"
+    rc=$?
+    rm -rf "$workdir"
+    [ "$rc" -eq 0 ] || return "$rc"
     dbg "install_patched_dlls: exit success"
 }
 
@@ -576,8 +928,8 @@ download_with_progress() {
 # message to error_file and returns non-zero -- callers must not call
 # whiptail from inside this pipeline, only after it's done.
 run_gauged_pipeline() {
-    dbg "run_gauged_pipeline: enter version=[$1] dest=[$2]"
-    local version="$1" dest="$2" error_file="$3"
+    dbg "run_gauged_pipeline: enter version=[$1] dest=[$2] prefix=[$4]"
+    local version="$1" dest="$2" error_file="$3" prefix="${4:-}"
 
     dbg "run_gauged_pipeline: about to start piped block into whiptail --gauge"
     {
@@ -645,6 +997,21 @@ run_gauged_pipeline() {
         fi
         dbg "run_gauged_pipeline(subshell): install_patched_dlls done"
 
+        if [ -n "$prefix" ] && [ -d "$prefix" ]; then
+            local rmh_pid rmh_pct=88 rmh_text="Registering video and stream support (starting Wine)..."
+            gauge_step "$rmh_pct" "$rmh_text"
+            dbg "run_gauged_pipeline(subshell): calling register_media_handlers"
+            register_media_handlers "$dest" "$prefix" &
+            rmh_pid=$!
+            while kill -0 "$rmh_pid" 2>/dev/null; do
+                sleep 1
+                [ "$rmh_pct" -lt 98 ] && rmh_pct=$((rmh_pct + 1))
+                gauge_step "$rmh_pct" "$rmh_text"
+            done
+            wait "$rmh_pid" || true
+            dbg "run_gauged_pipeline(subshell): register_media_handlers done"
+        fi
+
         gauge_step 100 "Done."
         dbg "run_gauged_pipeline(subshell): reached end of piped block"
     } | whiptail --backtitle "$BACKTITLE" --title "Setting up Somnium Space" --gauge "Starting..." 10 78 0
@@ -659,14 +1026,14 @@ run_gauged_pipeline() {
 # via the gauge pipeline when whiptail is available, plain functions
 # otherwise. Shows an error and exits on failure either way.
 setup_proton_and_dlls() {
-    dbg "setup_proton_and_dlls: enter version=[$1] dest=[$2] HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
-    local version="$1" dest="$2"
+    dbg "setup_proton_and_dlls: enter version=[$1] dest=[$2] prefix=[${3:-}] HAVE_WHIPTAIL=$HAVE_WHIPTAIL"
+    local version="$1" dest="$2" prefix="${3:-}"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         local error_file
         error_file=$(mktemp)
         dbg "setup_proton_and_dlls: calling run_gauged_pipeline, error_file=[$error_file]"
-        if ! run_gauged_pipeline "$version" "$dest" "$error_file"; then
+        if ! run_gauged_pipeline "$version" "$dest" "$error_file" "$prefix"; then
             dbg "setup_proton_and_dlls: run_gauged_pipeline FAILED, showing error"
             local error_text
             error_text=$(cat "$error_file")
@@ -685,7 +1052,13 @@ setup_proton_and_dlls() {
     dbg "setup_proton_and_dlls: plain path, calling download_proton"
     download_proton "$version" "$dest"
     dbg "setup_proton_and_dlls: plain path, calling install_patched_dlls"
-    if ! install_patched_dlls "$dest"; then
+    if install_patched_dlls "$dest"; then
+        if [ -n "$prefix" ] && [ -d "$prefix" ]; then
+            echo "Registering video and stream support (starting Wine, this takes a moment)..."
+            register_media_handlers "$dest" "$prefix"
+            echo "Done."
+        fi
+    else
         dbg "setup_proton_and_dlls: plain path install_patched_dlls FAILED"
         ui_msg "Error" "Failed to install patched DLLs from the somnilux release."
         exit 1
@@ -702,6 +1075,18 @@ run_in_prefix() {
     PROTONPATH="$proton_dir" WINEPREFIX="$prefix_path" GAMEID="umu-somnium" "$UMU_RUN_BIN" "$@" || rc=$?
     dbg "run_in_prefix: umu-run returned rc=$rc"
     return "$rc"
+}
+
+# register_media_handlers proton_dir prefix_path
+register_media_handlers() {
+    dbg "register_media_handlers: enter proton_dir=[$1] prefix_path=[$2]"
+    local proton_dir="$1" prefix_path="$2"
+
+    if run_in_prefix "$proton_dir" "$prefix_path" regsvr32 /s winedmo.dll >/dev/null 2>&1; then
+        dbg "register_media_handlers: exit success"
+    else
+        dbg "register_media_handlers: regsvr32 FAILED, continuing"
+    fi
 }
 
 show_installer_tips() {
@@ -725,9 +1110,357 @@ create_prefix_and_run_installer() {
 
     mkdir -p "$prefix_path"
     show_installer_tips
-    echo "Creating the prefix and launching the Somnium installer..."
+    echo "Creating the install location and launching the Somnium installer..."
     run_in_prefix "$proton_dir" "$prefix_path" "$installer_path"
     dbg "create_prefix_and_run_installer: exit"
+}
+
+# create_launch_script prefix_path proton_dir
+create_launch_script() {
+    dbg "create_launch_script: enter"
+    local prefix_path="$1" proton_dir="$2"
+    local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
+
+    mkdir -p "$(dirname "$LAUNCH_SCRIPT")"
+
+    cat > "$LAUNCH_SCRIPT.tmp" <<EOF
+#!/usr/bin/env bash
+# Generated by the somnilux installer. Re-run the installer to regenerate.
+
+PROTON_DIR="$proton_dir"
+PREFIX_PATH="$prefix_path"
+UMU_RUN="$UMU_RUN_BIN"
+LAUNCHER="$launcher_path"
+LAUNCH_LOG="$LAUNCH_LOG"
+OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
+GAME_ID="umu-somnium"
+YTDLP_EXTRACTOR_ARGS="youtube:player_client=android"
+EOF
+
+    cat >> "$LAUNCH_SCRIPT.tmp" <<'SOMNILUX_LAUNCH_BODY'
+
+if [ -t 1 ] && [ -t 0 ]; then
+    INTERACTIVE=1
+    exec 3>&1
+else
+    INTERACTIVE=0
+    exec 3>/dev/null
+fi
+
+mkdir -p "$(dirname "$LAUNCH_LOG")"
+exec >"$LAUNCH_LOG" 2>&1
+
+RUNTIME_NAME="none detected"
+
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+
+say() {
+    log "$*"
+    printf '%s\n' "$*" >&3
+}
+
+trap 'log "Cancelled with Ctrl+C. The running session was left alone."; exit 130' INT
+
+PREFIX_CANON="${PREFIX_PATH%/}"
+PREFIX_CANON="${PREFIX_CANON%/pfx}"
+PREFIX_CANON="${PREFIX_CANON%/}"
+PREFIX_REAL="$(realpath -m "$PREFIX_CANON" 2>/dev/null || printf '%s' "$PREFIX_CANON")"
+
+self_pids() {
+    local pid=$$ depth=0 stat rest
+    while [ "$pid" -gt 1 ] && [ "$depth" -lt 64 ]; do
+        printf '%s\n' "$pid"
+        stat=$(cat "/proc/$pid/stat" 2>/dev/null) || break
+        rest=${stat#*') '}
+        set -- $rest
+        pid=${2:-1}
+        depth=$((depth + 1))
+    done
+}
+
+SELF_PIDS=" $(self_pids | tr '\n' ' ') "
+
+session_pids() {
+    local candidates f pid entry wp scdp
+    candidates=$(grep -lsaF \
+        -e "WINEPREFIX=$PREFIX_CANON" \
+        -e "WINEPREFIX=$PREFIX_REAL" \
+        -e "STEAM_COMPAT_DATA_PATH=$PREFIX_CANON" \
+        -e "STEAM_COMPAT_DATA_PATH=$PREFIX_REAL" \
+        /proc/[0-9]*/environ 2>/dev/null) || true
+    [ -n "$candidates" ] || return 0
+
+    for f in $candidates; do
+        pid=${f#/proc/}
+        pid=${pid%/environ}
+        case "$SELF_PIDS" in *" $pid "*) continue ;; esac
+        wp=""
+        scdp=""
+        { while IFS= read -r -d '' entry; do
+            case "$entry" in
+                WINEPREFIX=*)
+                    wp=${entry#WINEPREFIX=}
+                    wp=${wp%/}; wp=${wp%/pfx}; wp=${wp%/}
+                    ;;
+                STEAM_COMPAT_DATA_PATH=*)
+                    scdp=${entry#STEAM_COMPAT_DATA_PATH=}
+                    scdp=${scdp%/}; scdp=${scdp%/pfx}; scdp=${scdp%/}
+                    ;;
+            esac
+        done < "/proc/$pid/environ"; } 2>/dev/null
+        case "$wp" in "$PREFIX_CANON"|"$PREFIX_REAL") printf '%s\n' "$pid"; continue ;; esac
+        case "$scdp" in "$PREFIX_CANON"|"$PREFIX_REAL") printf '%s\n' "$pid" ;; esac
+    done
+}
+
+confirm_restart() {
+    local i rc message
+    message="Somnium Space is already running.
+
+This will close it and start the launcher again."
+
+    if [ "$INTERACTIVE" = 1 ]; then
+        say "Press Enter to continue now, or Ctrl+C to cancel."
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            printf '\r  continuing in %2ds... ' "$i" >&3
+            if read -r -t 1; then
+                break
+            fi
+        done
+        printf '\r                          \r' >&3
+        say "Continuing..."
+        return 0
+    fi
+
+    if command -v kdialog >/dev/null 2>&1; then
+        rc=0
+        timeout 30 kdialog --title "Somnilux" --warningcontinuecancel "$message" >/dev/null 2>&1 || rc=$?
+    elif command -v zenity >/dev/null 2>&1; then
+        rc=0
+        timeout 30 zenity --question --title "Somnilux" --text "$message" \
+            --ok-label "Restart" --cancel-label "Cancel" >/dev/null 2>&1 || rc=$?
+    else
+        log "No terminal and no dialog tool available, restarting without asking."
+        return 0
+    fi
+
+    case "$rc" in
+        0)   return 0 ;;
+        5|124) log "No answer to the restart prompt, restarting anyway."; return 0 ;;
+        *)   return 1 ;;
+    esac
+}
+
+stop_existing_session() {
+    local pids pid waited
+    pids=$(session_pids)
+    if [ -z "$pids" ]; then
+        log "No existing session found for this prefix."
+        return 0
+    fi
+
+    say "Somnium Space instance detected."
+    say "This script will safely close it and start a new Somnium Space Launcher."
+    log "An existing session is using $PREFIX_CANON. Stopping it first:"
+    for pid in $pids; do
+        log "  pid $pid  $({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | cut -c1-100)"
+    done
+
+    if ! confirm_restart; then
+        return 1
+    fi
+
+    pids=$(session_pids)
+    if [ -z "$pids" ]; then
+        log "The previous session exited while waiting for an answer."
+        return 0
+    fi
+
+    say "Stopping process $(printf '%s' "$pids" | tr '\n' ' ')"
+    kill -TERM $pids 2>/dev/null || true
+    waited=0
+    while [ "$waited" -lt 20 ]; do
+        sleep 0.5
+        pids=$(session_pids)
+        if [ -z "$pids" ]; then
+            say "Existing instance closed."
+            return 0
+        fi
+        waited=$((waited + 1))
+    done
+
+    log "Still running after 10s, forcing: $(printf '%s' "$pids" | tr '\n' ' ')"
+    kill -KILL $pids 2>/dev/null || true
+    sleep 1
+
+    pids=$(session_pids)
+    if [ -n "$pids" ]; then
+        log "WARNING: survived SIGKILL: $(printf '%s' "$pids" | tr '\n' ' ')"
+        log "WARNING: this launch may hang. Log out and back in if it does."
+    else
+        log "Previous session stopped."
+    fi
+}
+
+openxr_manifest() {
+    local dir name
+    if [ -n "${XR_RUNTIME_JSON:-}" ] && [ -r "${XR_RUNTIME_JSON:-}" ]; then
+        printf '%s' "$XR_RUNTIME_JSON"
+        return 0
+    fi
+    local IFS=:
+    for dir in "${XDG_CONFIG_HOME:-$HOME/.config}" ${XDG_CONFIG_DIRS:-/etc/xdg} /etc/xdg; do
+        [ -n "$dir" ] || continue
+        for name in active_runtime.x86_64.json active_runtime.json; do
+            if [ -r "$dir/openxr/1/$name" ]; then
+                printf '%s' "$dir/openxr/1/$name"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+openxr_library() {
+    python3 - "$1" <<'PYTHON'
+import json, os, sys
+try:
+    with open(sys.argv[1]) as fh:
+        lib = json.load(fh)["runtime"]["library_path"]
+except Exception:
+    sys.exit(1)
+if not os.path.isabs(lib):
+    if "/" not in lib:
+        sys.exit(1)
+    lib = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(sys.argv[1])), lib))
+print(lib)
+PYTHON
+}
+
+openxr_runtime_name() {
+    python3 - "$1" <<'PYTHON'
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        name = json.load(fh)["runtime"].get("name")
+except Exception:
+    sys.exit(1)
+if not name:
+    sys.exit(1)
+print(name)
+PYTHON
+}
+
+runtime_name_from_lib() {
+    case "$1" in
+        *wivrn*)              printf 'WiVRn' ;;
+        *monado*)             printf 'Monado' ;;
+        *steamvr*|*vrclient*) printf 'SteamVR' ;;
+        *openxr_*)            printf '%s' "${1##*/libopenxr_}" ;;
+        *)                    return 1 ;;
+    esac
+}
+
+share_root_for() {
+    local path="$1"
+    case "$path" in
+        "$HOME"/*) return 1 ;;
+        /usr/*|/etc/*|/bin/*|/sbin/*|/lib/*|/lib64/*|/run/*|/proc/*|/sys/*|/dev/*|/tmp/*|/var/tmp/*|/var/run/*)
+            return 1
+            ;;
+        */flatpak/app/*)
+            printf '%s' "${path%%/app/*}/app/$(printf '%s' "${path#*/app/}" | cut -d/ -f1)"
+            return 0
+            ;;
+    esac
+    dirname "$path"
+}
+
+OPENXR_ENV=()
+
+setup_openxr_env() {
+    local line manifest target lib path root shares=""
+
+    if [ -r "$OPENXR_OVERRIDE_CONF" ]; then
+        RUNTIME_NAME="set by openxr.conf"
+        log "OpenXR: using overrides from $OPENXR_OVERRIDE_CONF"
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*) continue ;; esac
+            OPENXR_ENV+=("$line")
+            log "OpenXR:   $line"
+        done < "$OPENXR_OVERRIDE_CONF"
+        return 0
+    fi
+
+    OPENXR_ENV+=("PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES=1")
+
+    if ! manifest=$(openxr_manifest); then
+        RUNTIME_NAME="none detected - start your VR runtime, then relaunch"
+        log "OpenXR: no active runtime found. Start your runtime, then relaunch."
+        return 0
+    fi
+    target=$(realpath -m "$manifest" 2>/dev/null || printf '%s' "$manifest")
+    log "OpenXR: manifest $manifest"
+    [ "$target" = "$manifest" ] || log "OpenXR: resolves to $target"
+
+    lib=$(openxr_library "$target" 2>/dev/null) || lib=""
+    [ -n "$lib" ] && log "OpenXR: runtime library $lib"
+
+    RUNTIME_NAME=$(openxr_runtime_name "$target" 2>/dev/null) \
+        || RUNTIME_NAME=$(runtime_name_from_lib "$lib" 2>/dev/null) \
+        || RUNTIME_NAME="unrecognised"
+
+    for path in "$lib"; do
+        [ -n "$path" ] || continue
+        root=$(share_root_for "$path") || continue
+        [ -n "$root" ] || continue
+        case ":$shares:" in *":$root:"*) continue ;; esac
+        shares="${shares:+$shares:}$root"
+    done
+
+    if [ -n "$shares" ]; then
+        log "OpenXR: exposing to the container: $shares"
+        OPENXR_ENV+=("PRESSURE_VESSEL_FILESYSTEMS_RW=$shares")
+    else
+        log "OpenXR: no extra container paths needed for this runtime."
+    fi
+}
+
+say "Starting Somnium Space Launcher"
+say ""
+log "prefix:  $PREFIX_CANON"
+log "proton:  $PROTON_DIR"
+if ! stop_existing_session; then
+    say "Cancelled. Your existing Somnium Space instance was left alone."
+    exit 0
+fi
+setup_openxr_env
+log "launcher: $LAUNCHER"
+log "---"
+
+LAUNCH_CMD=(env
+    PROTONPATH="$PROTON_DIR"
+    WINEPREFIX="$PREFIX_PATH"
+    GAMEID="$GAME_ID"
+    PROTON_YTDLP_EXTRACTOR_ARGS="$YTDLP_EXTRACTOR_ARGS"
+    ${OPENXR_ENV[@]+"${OPENXR_ENV[@]}"}
+    "$UMU_RUN" "$LAUNCHER")
+
+say ""
+say "Detected OXR Runtime: $RUNTIME_NAME"
+say "Launching: ${LAUNCH_CMD[*]}"
+say "==================================================================="
+
+( sleep 10; say ""; say "You can safely close this window." ) &
+
+exec "${LAUNCH_CMD[@]}"
+SOMNILUX_LAUNCH_BODY
+
+    chmod +x "$LAUNCH_SCRIPT.tmp"
+    mv "$LAUNCH_SCRIPT.tmp" "$LAUNCH_SCRIPT"
+
+    echo "Created launch script: $LAUNCH_SCRIPT"
+    dbg "create_launch_script: exit"
 }
 
 # create_desktop_entry prefix_path proton_dir
@@ -736,10 +1469,8 @@ create_desktop_entry() {
     local prefix_path="$1" proton_dir="$2"
     local apps_dir="$HOME/.local/share/applications"
     local desktop_file="$apps_dir/somnium-space.desktop"
-    local launcher_path="$prefix_path/$LAUNCHER_REL_PATH"
     local source_icon="$prefix_path/$ICON_REL_PATH"
     local icon_line=""
-    local launch_log="$HOME/.local/share/somnilux/launch.log"
 
     mkdir -p "$apps_dir"
 
@@ -768,8 +1499,8 @@ create_desktop_entry() {
 Type=Application
 Name=Somnium Space
 Comment=Somnium Space VR, via somnilux
-Exec=sh -c 'mkdir -p "\$(dirname "\$1")" && env PROTONPATH="\$2" WINEPREFIX="\$3" GAMEID=umu-somnium "\$4" "\$5" >"\$1" 2>&1' sh "$launch_log" "$proton_dir" "$prefix_path" "$UMU_RUN_BIN" "$launcher_path"
-Terminal=false
+Exec="$LAUNCH_SCRIPT"
+Terminal=true
 Categories=Game;
 $icon_line
 EOF
@@ -788,6 +1519,8 @@ main() {
     dbg "main: enter"
     local mode
     check_dependencies
+    stop_running_somnium
+    cache_load || true
     main_menu mode
     dbg "main: mode=[$mode]"
 
@@ -806,8 +1539,11 @@ main() {
             setup_proton_and_dlls "$proton_version" "$proton_dir"
             dbg "main: calling create_prefix_and_run_installer"
             create_prefix_and_run_installer "$installer_path" "$prefix_path" "$proton_dir"
+            dbg "main: calling create_launch_script"
+            create_launch_script "$prefix_path" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix_path" "$proton_dir"
+            cache_save "$prefix_path" "$proton_dir"
 
             ui_msg "Done" "Somnium Space is installed. Look for it in your application menu, or run it again via the desktop entry. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: install branch done"
@@ -828,9 +1564,12 @@ main() {
             dbg "main: calling download_umu"
             download_umu "$UMU_VERSION"
             dbg "main: calling setup_proton_and_dlls"
-            setup_proton_and_dlls "$proton_version" "$proton_dir"
+            setup_proton_and_dlls "$proton_version" "$proton_dir" "$prefix"
+            dbg "main: calling create_launch_script"
+            create_launch_script "$prefix" "$proton_dir"
             dbg "main: calling create_desktop_entry"
             create_desktop_entry "$prefix" "$proton_dir"
+            cache_save "$prefix" "$proton_dir"
 
             ui_msg "Done" "Repair complete. Patches re-applied and the desktop entry refreshed. If launching from the menu doesn't seem to do anything, check ~/.local/share/somnilux/launch.log for what happened."
             dbg "main: repair branch done"
@@ -844,6 +1583,7 @@ main() {
     dbg "main: exit"
 }
 
+parse_args "$@"
 dbg "top-level: about to call main"
 main
 dbg "top-level: main returned, script ending normally"
