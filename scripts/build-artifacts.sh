@@ -13,6 +13,7 @@ WINE_GE_DIR="${WINE_GE_DIR:-$PROJECT_ROOT/wine-ge}"
 FFMPEG_DIR="${FFMPEG_DIR:-$PROJECT_ROOT/ffmpeg-build}"
 OUT_DIR="${OUT_DIR:-$PROJECT_ROOT/build-artifacts}"
 ARCHIVE="${ARCHIVE:-$PROJECT_ROOT/somnilux-binaries.tar.gz}"
+INSTALL_SH="$SCRIPT_DIR/install.sh"
 REFERENCE_PROTON="${REFERENCE_PROTON:-/mnt/games/GE-Proton11-5-somnilux}"
 
 FFMPEG_VERSION="8.1"
@@ -50,8 +51,21 @@ require_pkgconfig() {
 On Fedora/Nobara: sudo dnf install libdav1d-devel gnutls-devel xz-devel bzip2-devel"
 }
 
+# The installer is the one definition of the archive format. Asking it here
+# means the number cannot drift between the thing that writes archives and
+# the thing that reads them.
+read_archive_format() {
+    [ -x "$INSTALL_SH" ] || die "install.sh not found at $INSTALL_SH"
+    ARCHIVE_FORMAT=$("$INSTALL_SH" --supported-format 2>/dev/null | tr -d '[:space:]')
+    case "$ARCHIVE_FORMAT" in
+        ''|*[!0-9]*) die "install.sh --supported-format did not return a number (got '$ARCHIVE_FORMAT')" ;;
+    esac
+}
+
 preflight() {
     say "Preflight"
+    read_archive_format
+    info "archive format: $ARCHIVE_FORMAT (from install.sh)"
     require_tools gcc make autoconf pkg-config curl tar nasm python3 readelf \
                   x86_64-w64-mingw32-gcc
     require_pkgconfig dav1d gnutls liblzma bzip2
@@ -201,6 +215,9 @@ collect() {
     for d in "${GE_DLLS[@]}"; do
         stage "$WINE_GE_DIR/build/dlls/$d/x86_64-windows/$d.dll" "$OUT_DIR/x86_64-windows/$d.dll"
     done
+
+    printf '%s\n' "$ARCHIVE_FORMAT" > "$OUT_DIR/archive-format.txt"
+    info "$(printf '%10d  %s' "$(stat -c%s "$OUT_DIR/archive-format.txt")" "archive-format.txt (format $ARCHIVE_FORMAT)")"
 
     local f lib
     for f in "${FFMPEG_LIBS[@]}"; do
