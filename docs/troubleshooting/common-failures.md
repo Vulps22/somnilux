@@ -115,13 +115,24 @@ installed or aren't being used. Run the installer and choose **repair**.
 
 ## No headset, or the wrong runtime detected
 
-Check the `Detected OXR Runtime:` line in the log.
+!!! warning "Your headset must be connected to the PC before you launch"
+    Starting your OpenXR runtime is **not enough**. The headset itself has to
+    be connected and awake — plugged in, or linked wirelessly and actually
+    paired through to the PC — *before* you start Somnium.
 
-**First thing to rule out: was your headset connected before you launched?**
-Detection runs once, at the moment Somnium starts. If you connected the
-headset or started your runtime afterwards, detection will already have failed
-— and this is the most common reason it does. Close Somnium, bring the runtime
-up, launch again.
+    Detection runs once, at the moment Somnium starts. A runtime with no
+    headset attached to it has nothing to report, so detection fails even
+    though the runtime is running perfectly well.
+
+    **Order that works:** connect the headset → confirm the runtime sees it →
+    launch Somnium.
+
+    If you got it the wrong way round, nothing is broken. Close Somnium,
+    connect the headset properly, and launch again. No reinstall, no
+    reconfiguration.
+
+Check the `Detected OXR Runtime:` line in the log. If it says `none detected`,
+the above is overwhelmingly the most likely reason.
 
 Otherwise, detection runs at every launch, so setting a different runtime
 active and starting Somnium again is all that's needed — no reinstall. See
