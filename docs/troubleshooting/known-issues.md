@@ -25,24 +25,20 @@ Recovering from it is covered under [Restarting](../run/restarting.md).
 Partial, and improving in stages. The current support table lives on
 [Video playback](../run/video.md).
 
-**Audio over RTSP doesn't work.** Video plays; sound doesn't. Not a missing
-codec and not a missing track — the audio is present and decodes fine
-elsewhere. Diagnosing it needs a trace against a live stream, because
-Somnium's server-side allowlist rejects local URLs, so it's blocked on a live
-event to test against.
+**Audio over RTSP doesn't work.** Video plays; sound doesn't. Being worked
+on, but it can only be diagnosed against a live stream, so progress waits on a
+live event to test against.
 
 **VRCDN over HTTPS doesn't load at all.** Same blocker.
 
 **Twitch doesn't load.**
 
-**YouTube is capped at 360p.** Somnium asks `yt-dlp` for a single stream, and
-360p is the best YouTube still serves with audio already in it. Higher
-qualities are video-only and would play silently. Raising this needs something
-locally recombining two streams — real work, not a setting.
+**YouTube plays at 360p.** YouTube no longer distributes its higher qualities
+with the sound in the same stream, and 360p is the best one that still is.
+Raising it isn't a setting — it needs work that hasn't been built.
 
-**The first YouTube video of a session is slow to start.** Somnium's bundled
-`yt-dlp.exe` unpacks itself on every run under Wine, which takes minutes
-rather than seconds. Not a Somnilux fault and not currently worked around.
+**The first video of a session is slow to start**, sometimes by a few minutes.
+Expected, and not currently worked around.
 
 ## Platform
 

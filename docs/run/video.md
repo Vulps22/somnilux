@@ -1,10 +1,8 @@
 # Video playback
 
-In-world screens play, with sound and ARS reactive lighting. Getting there
-meant fixing five separate faults in Wine and GE-Proton, each of which was
-hiding the next — see [What's fixed and why](../understanding/whats-fixed.md).
+In-world screens play, with sound and ARS reactive lighting.
 
-Some sources still don't work. This page is the honest current state.
+Not every source works yet. This is the current state.
 
 ## What plays today
 
@@ -17,49 +15,27 @@ Some sources still don't work. This page is the honest current state.
 | VRCDN over HTTPS | ❌ | ❌ | Doesn't load |
 | Twitch | ❌ | ❌ | Doesn't load |
 
-## Why YouTube is capped at 360p
-
-Somnium asks `yt-dlp` for a **single** stream and plays whatever URL it prints
-back. 360p is the best quality YouTube still serves with the audio already
-inside that one stream — everything above it is video-only and would play
-silently.
-
-Sound seemed the better trade. Playing a rave with a crisp picture and no
-music is worse than a soft picture with music.
-
-Getting past this needs both streams played together, which means something
-locally recombining them before Somnium sees them. That's a real piece of work
-rather than a setting, and it isn't built.
+!!! note "YouTube plays at 360p"
+    YouTube no longer distributes its higher qualities with the sound included
+    in the same stream, and 360p is the best one that still is. Anything
+    sharper would play silently. This isn't a setting you can change.
 
 ## Audio over RTSP
 
-RTSP video works; audio over it does not, and this is unfixed.
-
-It isn't a missing codec and it isn't a missing track — the audio is there in
-the stream and decodes fine elsewhere. Diagnosing it properly needs a trace
-against a **live** stream, because Somnium's server-side allowlist rejects
-local URLs, so a self-hosted test server is no help. That means waiting for a
-live event to debug against.
+RTSP video plays without sound. This is a known limitation and it's being
+worked on — see [Known issues](../troubleshooting/known-issues.md).
 
 ## If video doesn't play at all
 
 - **Check you're on the current fixes.** Video support arrived in Somnilux
-  3.0. If you installed earlier, run the installer again and choose repair —
-  see [Updating](../install/updating.md).
-- **Check the source.** Against the table above, is it something that's
-  expected to work?
-- **Check [`launch.log`](../troubleshooting/launch-log.md).** A freeze that
-  looks like a crash used to be the media engine deadlocking; if you see
-  something like that on a current install, it's worth
-  [reporting](../troubleshooting/reporting.md).
+  3.0. If you installed before that, run the installer again and choose
+  repair — see [Updating](../install/updating.md).
+- **Check the source** against the table above.
+- **Give it a moment.** The first video of a session can take a few minutes to
+  start. That's expected, and it's not a sign anything is wrong.
+- **Check [`launch.log`](../troubleshooting/launch-log.md)** if it still won't
+  play, and [report it](../troubleshooting/reporting.md).
 
-The first play of a YouTube link can take a while — Somnium's bundled
-`yt-dlp.exe` is slow to start under Wine. Give it time before deciding it's
-broken.
-
-## AV1
-
-AV1 video decodes correctly. GE-Proton's own ffmpeg build ships without a
-software AV1 decoder, so every AV1 frame failed; Somnilux ships an ffmpeg
-built with the decoder enabled. This affects any GE-Proton user playing AV1
-content, not just Somnium.
+Why these limits exist, and what had to be fixed in Wine to get video working
+at all, is covered in
+[What's fixed and why](../understanding/whats-fixed.md).
