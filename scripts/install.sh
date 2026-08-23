@@ -33,6 +33,7 @@ UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
 FORCE_OUTDATED=0
+IN_GAUGE=0
 DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
 DLL_RELEASE_TAG=""
 # The archive format this script speaks. Each line of supported/compat.txt is
@@ -777,7 +778,7 @@ install_dlls_from_archive() {
     local proton_dir="$1" archive="$2"
     local workdir found=0 d f
 
-    echo "Installing patched binaries from $(basename "$archive")..."
+    note "Installing patched binaries from $(basename "$archive")..."
 
     workdir=$(mktemp -d)
     if ! tar -xzf "$archive" -C "$workdir" 2>/dev/null; then
@@ -844,12 +845,35 @@ Get an installer matching the fixes, or fixes matching the installer:
         ui_msg "Error" "$archive contains none of the expected directories (x86_64-unix, x86_64-windows, x86_64-linux-gnu)."
         return 1
     fi
-    echo "Installed $found file(s)."
+    note "Installed $found file(s)."
     dbg "install_dlls_from_archive: exit success, $found file(s)"
 }
 
 # install_patched_dlls proton_dir
 # Requires DLL_RELEASE_TAG to already be set (fetch_supported_versions).
+# Inside the gauge, stdout is whiptail's control stream: a bare number sets the
+# percentage and anything else corrupts the dialog.
+note() {
+    if [ "$IN_GAUGE" -eq 1 ]; then
+        dbg "note: $*"
+    else
+        echo "$*"
+    fi
+}
+
+# download_archive url dest
+# curl --progress-bar writes to stderr, which inside the gauge pipeline is the
+# terminal, not the control stream -- it paints over the dialog. Feed the gauge
+# instead when there is one.
+download_archive() {
+    local url="$1" dest="$2"
+    if [ "$IN_GAUGE" -eq 1 ]; then
+        download_with_progress "$url" "$dest"
+        return $?
+    fi
+    curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$dest" "$url"
+}
+
 install_patched_dlls() {
     dbg "install_patched_dlls: enter proton_dir=[$1]"
     local proton_dir="$1"
@@ -863,9 +887,8 @@ install_patched_dlls() {
     local workdir rc
     workdir=$(mktemp -d)
 
-    echo "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
-    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" \
-              -o "$workdir/$DLL_ARCHIVE_NAME" "$release_url/$DLL_ARCHIVE_NAME"; then
+    note "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
+    if ! download_archive "$release_url/$DLL_ARCHIVE_NAME" "$workdir/$DLL_ARCHIVE_NAME"; then
         dbg "install_patched_dlls: download of $DLL_ARCHIVE_NAME FAILED"
         rm -rf "$workdir"
         return 1
@@ -988,13 +1011,15 @@ run_gauged_pipeline() {
             dbg "run_gauged_pipeline(subshell): move done"
         fi
 
-        gauge_step 75 "Installing patched DLLs..."
+        gauge_step 75 "Downloading patched binaries..."
+        IN_GAUGE=1
         dbg "run_gauged_pipeline(subshell): calling install_patched_dlls"
-        if ! install_patched_dlls "$dest" >/dev/null; then
+        if ! install_patched_dlls "$dest" 2>>"$DEBUG_LOG"; then
             dbg "run_gauged_pipeline(subshell): install_patched_dlls FAILED"
             echo "Failed to install patched DLLs from the somnilux release." > "$error_file"
             exit 1
         fi
+        IN_GAUGE=0
         dbg "run_gauged_pipeline(subshell): install_patched_dlls done"
 
         if [ -n "$prefix" ] && [ -d "$prefix" ]; then
