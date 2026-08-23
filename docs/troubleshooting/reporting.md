@@ -49,6 +49,11 @@ Attach it **in full**. It's usually under a hundred lines, and the useful part
 is often where the log stops rather than the scariest-looking line — which is
 hard to judge when you're only sent an excerpt.
 
+Please don't strip out Wine's `fixme:` and `err:` lines. A `fixme:` means Wine
+hasn't implemented something Somnium asked for, and that's how every gap
+Somnilux fixes was found in the first place — see
+[`fixme:` lines](launch-log.md#fixme-lines-please-do-report-these).
+
 Alongside it:
 
 - **Somnilux version** — `./install.sh --version`, or the release you
