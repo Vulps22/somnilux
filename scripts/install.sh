@@ -17,11 +17,10 @@ PROJECT_URL="https://github.com/Vulps22/somnilux"
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 CURL_TIMEOUT_OPTS=(--connect-timeout 10 --max-time 30)
 CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
-SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/main/supported"
-# TEMPORARY -- revert before release. Points the generated launch script's
-# update check at this branch, so a release can be faked in supported/ without
-# publishing one.
-LAUNCH_SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/add-launch-update-check/supported"
+# TEMPORARY -- revert to .../main/supported before release. Points everything
+# that reads supported/ at this branch, so releases can be faked there without
+# publishing any.
+SUPPORTED_BASE_URL="https://raw.githubusercontent.com/Vulps22/somnilux/add-launch-update-check/supported"
 DEFAULT_PREFIX="$HOME/Games/umu/umu-somnium"
 LAUNCHER_REL_PATH="drive_c/Program Files/Somnium Space/Somnium Space Launcher.exe"
 ICON_REL_PATH="drive_c/Program Files/Somnium Space/SomniumEmblem.ico"
@@ -1190,7 +1189,7 @@ LAUNCHER="$launcher_path"
 LAUNCH_LOG="$LAUNCH_LOG"
 OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
 PATHS_CONF="$PATHS_CACHE"
-SUPPORTED_BASE_URL="$LAUNCH_SUPPORTED_BASE_URL"
+SUPPORTED_BASE_URL="$SUPPORTED_BASE_URL"
 PROJECT_URL="$PROJECT_URL"
 GAME_ID="umu-somnium"
 YTDLP_EXTRACTOR_ARGS="youtube:player_client=android"
