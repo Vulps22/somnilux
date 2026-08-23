@@ -32,8 +32,20 @@ UMU_RUN_BIN="$UMU_DEST/umu-run"
 UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
+FORCE_OUTDATED=0
 DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
 DLL_RELEASE_TAG=""
+# The archive format this script speaks. Each line of supported/compat.txt is
+# "format:tag" for one binary release; we install the newest build matching
+# this number exactly. Not the newest we are "at least" -- a later format may
+# lay the archive out in a way this code would install wrongly, and an older
+# one may need handling this code has dropped.
+#
+# Bump when an installer of the previous number would get it wrong: a new
+# top-level directory, a different archive type, a required step this code
+# does not perform. More files inside an existing directory need no bump.
+ARCHIVE_FORMAT=2
+ARCHIVE_DIRS=(x86_64-unix x86_64-windows x86_64-linux-gnu)
 PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
 CACHED_PREFIX=""
 CACHED_PROTON=""
@@ -78,6 +90,14 @@ somnilux installer
 
   install.sh [--use-local-dlls-at <archive>]
 
+  --supported-format
+        Print the archive format this installer can install, and exit. Used by
+        scripts/build-artifacts.sh so the number lives in one place.
+
+  --force-outdated-fixes
+        Skip the warning shown when newer fixes exist that this installer is
+        too old to install. It still installs the newest fixes it can use.
+
   --use-local-dlls-at <archive>
         Install the patched binaries from a local .tar.gz instead of
         downloading them from the release. The archive is the one produced by
@@ -102,6 +122,17 @@ parse_args() {
                 ;;
             --use-local-dlls-at=*)
                 LOCAL_DLL_ARCHIVE="${1#*=}"
+                shift
+                ;;
+            --supported-format)
+                # The EXIT trap restores the terminal by writing escapes to
+                # stdout, which would corrupt this for a caller parsing it.
+                trap - EXIT
+                printf '%s\n' "$ARCHIVE_FORMAT"
+                exit 0
+                ;;
+            --force-outdated-fixes)
+                FORCE_OUTDATED=1
                 shift
                 ;;
             -h|--help)
@@ -272,7 +303,7 @@ Somnium Space would install but the launcher would silently fail to start. Pleas
 # Sets SUPPORTED_PROTON_VERSIONS (array), DEFAULT_PROTON_VERSION, DEFAULT_WINE_VERSION.
 fetch_supported_versions() {
     dbg "fetch_supported_versions: enter"
-    local proton_txt default_txt dlls_txt
+    local proton_txt default_txt compat_txt
 
     dbg "fetch_supported_versions: curl proton.txt starting"
     if ! proton_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/proton.txt"); then
@@ -290,12 +321,47 @@ fetch_supported_versions() {
     fi
     dbg "fetch_supported_versions: curl default.txt done, got [$default_txt]"
 
-    dbg "fetch_supported_versions: curl dlls.txt starting"
-    if dlls_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/dlls.txt"); then
-        DLL_RELEASE_TAG=$(sed -n '1p' <<< "$dlls_txt")
-        dbg "fetch_supported_versions: DLL_RELEASE_TAG=[$DLL_RELEASE_TAG]"
+    # compat.txt names the binary release for each archive format, one
+    # "format:tag" per line. A build that changes the format adds a line and
+    # merges to main with its release, so the pairing ships together.
+    dbg "fetch_supported_versions: curl compat.txt starting"
+    if [ -n "$LOCAL_DLL_ARCHIVE" ]; then
+        # compat.txt only decides which release to download. We are not
+        # downloading one; the archive's own stamp is what gets checked.
+        dbg "fetch_supported_versions: local archive given, skipping compat.txt"
+    elif compat_txt=$(curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" "$SUPPORTED_BASE_URL/compat.txt"); then
+        local fmt tag newest=0
+        while IFS=: read -r fmt tag; do
+            case "$fmt" in ''|\#*|*[!0-9]*) continue ;; esac
+            [ -n "$tag" ] || continue
+            newest="$fmt"
+            [ "$fmt" -eq "$ARCHIVE_FORMAT" ] && DLL_RELEASE_TAG="$tag"
+        done <<< "$compat_txt"
+        dbg "fetch_supported_versions: ARCHIVE_FORMAT=$ARCHIVE_FORMAT tag=[$DLL_RELEASE_TAG] newest_offered=$newest"
+
+        if [ -z "$DLL_RELEASE_TAG" ]; then
+            dbg "fetch_supported_versions: no build matches format $ARCHIVE_FORMAT"
+            ui_msg "No compatible fixes found" "This installer needs patched binaries in format $ARCHIVE_FORMAT, and none are published.
+
+That is almost certainly a mistake on our side rather than anything you have done. Please report it so it can be fixed:
+
+  https://github.com/Vulps22/somnilux/issues/new/choose"
+            exit 1
+        fi
+
+        if [ "$newest" -gt "$ARCHIVE_FORMAT" ] && [ "$FORCE_OUTDATED" -eq 0 ]; then
+            ui_msg "Update needed" "Newer fixes have been published that this installer is too old to install.
+
+It will carry on with the newest fixes it can use, but you are missing later ones. Download a newer installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+        fi
     else
-        dbg "fetch_supported_versions: no dlls.txt, deriving tag from the Wine version"
+        dbg "fetch_supported_versions: curl compat.txt FAILED"
+        ui_msg "Cannot reach GitHub" "The list of published fixes could not be downloaded, so this installer cannot tell which ones it should install.
+
+Check your internet connection and try again. Nothing has been changed."
+        exit 1
     fi
 
     mapfile -t SUPPORTED_PROTON_VERSIONS <<< "$proton_txt"
@@ -721,7 +787,46 @@ install_dlls_from_archive() {
         return 1
     fi
 
-    for d in x86_64-unix x86_64-windows x86_64-linux-gnu; do
+    local archive_format=""
+    [ -r "$workdir/archive-format.txt" ] && archive_format=$(sed -n '1p' "$workdir/archive-format.txt" | tr -d '[:space:]')
+    dbg "install_dlls_from_archive: archive_format=[$archive_format] ours=$ARCHIVE_FORMAT"
+
+    if [ -z "$archive_format" ]; then
+        rm -rf "$workdir"
+        ui_msg "Error" "This archive does not say what format it is, so it is older than this installer can safely use.
+
+Download the fixes through the installer normally, or fetch a current archive."
+        return 1
+    fi
+
+    if [ "$archive_format" != "$ARCHIVE_FORMAT" ]; then
+        rm -rf "$workdir"
+        ui_msg "Incompatible fixes" "These fixes are format $archive_format and this installer handles format $ARCHIVE_FORMAT.
+
+Installing them would put files in the wrong place or miss some entirely, so nothing has been changed.
+
+Get an installer matching the fixes, or fixes matching the installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+        return 1
+    fi
+
+    for d in "$workdir"/*/; do
+        d=$(basename "$d")
+        case " ${ARCHIVE_DIRS[*]} " in
+            *" $d "*) ;;
+            *)
+                dbg "install_dlls_from_archive: unknown directory [$d]"
+                rm -rf "$workdir"
+                ui_msg "Error" "This archive contains '$d', which this installer does not know how to install. Download a newer installer:
+
+  https://github.com/Vulps22/somnilux/releases"
+                return 1
+                ;;
+        esac
+    done
+
+    for d in "${ARCHIVE_DIRS[@]}"; do
         [ -d "$workdir/$d" ] || continue
         for f in "$workdir/$d"/*; do
             [ -f "$f" ] || continue
@@ -744,7 +849,7 @@ install_dlls_from_archive() {
 }
 
 # install_patched_dlls proton_dir
-# Requires DEFAULT_WINE_VERSION to already be set (fetch_supported_versions).
+# Requires DLL_RELEASE_TAG to already be set (fetch_supported_versions).
 install_patched_dlls() {
     dbg "install_patched_dlls: enter proton_dir=[$1]"
     local proton_dir="$1"
@@ -754,7 +859,7 @@ install_patched_dlls() {
         return $?
     fi
 
-    local release_url="$DLL_RELEASE_BASE_URL/${DLL_RELEASE_TAG:-wine-$DEFAULT_WINE_VERSION}"
+    local release_url="$DLL_RELEASE_BASE_URL/$DLL_RELEASE_TAG"
     local workdir rc
     workdir=$(mktemp -d)
 
