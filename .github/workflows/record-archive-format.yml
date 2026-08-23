@@ -1,0 +1,94 @@
+name: Record archive format
+
+# When a binary release is published, read the format out of the archive
+# itself and record it in supported/compat.txt, which install.sh reads to
+# decide which release it can install.
+#
+# The format is taken from archive-format.txt inside the archive, never from
+# the tag or anything inferred, so compat.txt cannot end up disagreeing with
+# the thing it points at.
+
+on:
+  release:
+    # published, not released: binary builds go out as prereleases, and
+    # "released" does not fire for those.
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-archive-format
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check this release carries an archive
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+                     --json assets --jq '.assets[].name')
+          if grep -qx 'somnilux-binaries.tar.gz' <<< "$assets"; then
+            echo "is_archive=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_archive=false" >> "$GITHUB_OUTPUT"
+            echo "No somnilux-binaries.tar.gz in $TAG; this is not a binary release."
+          fi
+
+      - name: Check out main
+        if: steps.check.outputs.is_archive == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Read the format the archive declares
+        if: steps.check.outputs.is_archive == 'true'
+        id: format
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern somnilux-binaries.tar.gz --dir "$work"
+          tar -xzf "$work/somnilux-binaries.tar.gz" -C "$work" ./archive-format.txt
+          fmt=$(tr -d '[:space:]' < "$work/archive-format.txt")
+          case "$fmt" in
+            ''|*[!0-9]*)
+              echo "::error::archive-format.txt in $TAG is not a number (got '$fmt')"
+              exit 1
+              ;;
+          esac
+          echo "Archive declares format $fmt"
+          echo "fmt=$fmt" >> "$GITHUB_OUTPUT"
+
+      - name: Record it in compat.txt
+        if: steps.check.outputs.is_archive == 'true'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          FMT: ${{ steps.format.outputs.fmt }}
+        run: |
+          set -euo pipefail
+          line="$FMT:$TAG"
+          if grep -qxF "$line" supported/compat.txt 2>/dev/null; then
+            echo "compat.txt already records $line"
+            exit 0
+          fi
+          # Appended, not replaced: the file is a record of what each
+          # installer can still install, and install.sh takes the last line
+          # matching its own format.
+          printf '%s\n' "$line" >> supported/compat.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supported/compat.txt
+          git commit \
+            -m "Record $TAG as archive format $FMT" \
+            -m "Added automatically when the release was published. The format comes from archive-format.txt inside the archive, so this line and the release it names cannot disagree."
+          git push origin main
