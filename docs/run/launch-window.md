@@ -23,7 +23,12 @@ running. Leave it open or close it, whichever you prefer.
 **`Detected OXR Runtime:`** — which OpenXR runtime Somnilux found active and
 made reachable from inside the container. If this says something unexpected,
 or `none detected` when you expected a headset, that's your problem right
-there; see [VR runtimes and headsets](vr-runtimes.md).
+there.
+
+The usual cause is launching before the headset was ready. Detection runs
+once, at launch, so your headset must be connected and your runtime already
+running **before** you start Somnium. Close it, bring the runtime up, and
+launch again — see [VR runtimes and headsets](vr-runtimes.md).
 
 **`Launching:`** — the exact command being run, with the Proton path, prefix,
 and launcher executable. Useful in a bug report, and useful if you want to see

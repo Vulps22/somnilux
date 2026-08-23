@@ -115,10 +115,18 @@ installed or aren't being used. Run the installer and choose **repair**.
 
 ## No headset, or the wrong runtime detected
 
-Check the `Detected OXR Runtime:` line in the log. Detection runs at every
-launch, so set your runtime active and start Somnium again — no reinstall
-needed. See [VR runtimes](../run/vr-runtimes.md), including `openxr.conf` for
-runtimes detection doesn't handle on its own.
+Check the `Detected OXR Runtime:` line in the log.
+
+**First thing to rule out: was your headset connected before you launched?**
+Detection runs once, at the moment Somnium starts. If you connected the
+headset or started your runtime afterwards, detection will already have failed
+— and this is the most common reason it does. Close Somnium, bring the runtime
+up, launch again.
+
+Otherwise, detection runs at every launch, so setting a different runtime
+active and starting Somnium again is all that's needed — no reinstall. See
+[VR runtimes](../run/vr-runtimes.md), including `openxr.conf` for runtimes
+detection doesn't handle on its own.
 
 ## The launcher window vanished
 
