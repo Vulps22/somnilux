@@ -12,6 +12,8 @@ dbg() {
     printf '[%03d] %s pid=%s %s\n' "$DEBUG_N" "$(date +%H:%M:%S.%N)" "$$" "$1" >> "$DEBUG_LOG"
 }
 
+SCRIPT_VERSION="3.1"
+PROJECT_URL="https://github.com/Vulps22/somnilux"
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 CURL_TIMEOUT_OPTS=(--connect-timeout 10 --max-time 30)
 CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
@@ -33,6 +35,7 @@ UMU_VERSION_STAMP="$UMU_DEST/version"
 MIN_PYTHON_VERSION="3.10"
 LOCAL_DLL_ARCHIVE=""
 FORCE_OUTDATED=0
+IN_GAUGE=0
 DLL_ARCHIVE_NAME="somnilux-binaries.tar.gz"
 DLL_RELEASE_TAG=""
 # The archive format this script speaks. Each line of supported/compat.txt is
@@ -49,6 +52,9 @@ ARCHIVE_DIRS=(x86_64-unix x86_64-windows x86_64-linux-gnu)
 PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
 CACHED_PREFIX=""
 CACHED_PROTON=""
+CACHED_SCRIPT=""
+CACHED_BUILD=""
+CACHED_FORMAT=""
 
 # Parsed by hand rather than sourced -- this file records paths, and a stray
 # line in it should not become something this script executes.
@@ -59,25 +65,37 @@ cache_load() {
         case "$key" in
             prefix) CACHED_PREFIX="$value" ;;
             proton) CACHED_PROTON="$value" ;;
+            script) CACHED_SCRIPT="$value" ;;
+            build)  CACHED_BUILD="$value" ;;
+            format) CACHED_FORMAT="$value" ;;
         esac
     done < "$PATHS_CACHE"
-    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON]"
+    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON] script=[$CACHED_SCRIPT] build=[$CACHED_BUILD] format=[$CACHED_FORMAT]"
     [ -n "$CACHED_PREFIX" ]
 }
 
 # cache_save prefix proton
+# Also records what this run installed, so launch.sh can tell whether anything
+# newer has been published since.
 cache_save() {
     local prefix="$1" proton="$2"
-    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ]; then
+    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ] &&
+       [ "$SCRIPT_VERSION" = "$CACHED_SCRIPT" ] && [ "$DLL_RELEASE_TAG" = "$CACHED_BUILD" ] &&
+       [ "$ARCHIVE_FORMAT" = "$CACHED_FORMAT" ]; then
         dbg "cache_save: unchanged, not rewriting"
         return 0
     fi
     mkdir -p "$(dirname "$PATHS_CACHE")" || return 0
-    if printf 'prefix=%s\nproton=%s\n' "$prefix" "$proton" > "$PATHS_CACHE.tmp" 2>/dev/null &&
+    if printf 'prefix=%s\nproton=%s\nscript=%s\nbuild=%s\nformat=%s\n' \
+              "$prefix" "$proton" "$SCRIPT_VERSION" "$DLL_RELEASE_TAG" "$ARCHIVE_FORMAT" \
+              > "$PATHS_CACHE.tmp" 2>/dev/null &&
        mv "$PATHS_CACHE.tmp" "$PATHS_CACHE" 2>/dev/null; then
-        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton]"
+        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton] script=[$SCRIPT_VERSION] build=[$DLL_RELEASE_TAG] format=[$ARCHIVE_FORMAT]"
         CACHED_PREFIX="$prefix"
         CACHED_PROTON="$proton"
+        CACHED_SCRIPT="$SCRIPT_VERSION"
+        CACHED_BUILD="$DLL_RELEASE_TAG"
+        CACHED_FORMAT="$ARCHIVE_FORMAT"
     else
         dbg "cache_save: could not write $PATHS_CACHE, continuing anyway"
         rm -f "$PATHS_CACHE.tmp" 2>/dev/null || true
@@ -89,6 +107,11 @@ usage() {
 somnilux installer
 
   install.sh [--use-local-dlls-at <archive>]
+
+  -v, --version
+        Print this installer's version as major.minor, and exit. The release
+        workflow reads it from the published script so supported/script.txt
+        cannot disagree with what shipped.
 
   --supported-format
         Print the archive format this installer can install, and exit. Used by
@@ -129,6 +152,11 @@ parse_args() {
                 # stdout, which would corrupt this for a caller parsing it.
                 trap - EXIT
                 printf '%s\n' "$ARCHIVE_FORMAT"
+                exit 0
+                ;;
+            -v|--version)
+                trap - EXIT
+                printf '%s\n' "$SCRIPT_VERSION"
                 exit 0
                 ;;
             --force-outdated-fixes)
@@ -777,7 +805,7 @@ install_dlls_from_archive() {
     local proton_dir="$1" archive="$2"
     local workdir found=0 d f
 
-    echo "Installing patched binaries from $(basename "$archive")..."
+    note "Installing patched binaries from $(basename "$archive")..."
 
     workdir=$(mktemp -d)
     if ! tar -xzf "$archive" -C "$workdir" 2>/dev/null; then
@@ -844,12 +872,35 @@ Get an installer matching the fixes, or fixes matching the installer:
         ui_msg "Error" "$archive contains none of the expected directories (x86_64-unix, x86_64-windows, x86_64-linux-gnu)."
         return 1
     fi
-    echo "Installed $found file(s)."
+    note "Installed $found file(s)."
     dbg "install_dlls_from_archive: exit success, $found file(s)"
 }
 
 # install_patched_dlls proton_dir
 # Requires DLL_RELEASE_TAG to already be set (fetch_supported_versions).
+# Inside the gauge, stdout is whiptail's control stream: a bare number sets the
+# percentage and anything else corrupts the dialog.
+note() {
+    if [ "$IN_GAUGE" -eq 1 ]; then
+        dbg "note: $*"
+    else
+        echo "$*"
+    fi
+}
+
+# download_archive url dest
+# curl --progress-bar writes to stderr, which inside the gauge pipeline is the
+# terminal, not the control stream -- it paints over the dialog. Feed the gauge
+# instead when there is one.
+download_archive() {
+    local url="$1" dest="$2"
+    if [ "$IN_GAUGE" -eq 1 ]; then
+        download_with_progress "$url" "$dest"
+        return $?
+    fi
+    curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" -o "$dest" "$url"
+}
+
 install_patched_dlls() {
     dbg "install_patched_dlls: enter proton_dir=[$1]"
     local proton_dir="$1"
@@ -863,9 +914,8 @@ install_patched_dlls() {
     local workdir rc
     workdir=$(mktemp -d)
 
-    echo "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
-    if ! curl -fL --progress-bar "${CURL_TIMEOUT_OPTS_LARGE[@]}" \
-              -o "$workdir/$DLL_ARCHIVE_NAME" "$release_url/$DLL_ARCHIVE_NAME"; then
+    note "Downloading patched binaries (Wine $DEFAULT_WINE_VERSION build)..."
+    if ! download_archive "$release_url/$DLL_ARCHIVE_NAME" "$workdir/$DLL_ARCHIVE_NAME"; then
         dbg "install_patched_dlls: download of $DLL_ARCHIVE_NAME FAILED"
         rm -rf "$workdir"
         return 1
@@ -988,13 +1038,15 @@ run_gauged_pipeline() {
             dbg "run_gauged_pipeline(subshell): move done"
         fi
 
-        gauge_step 75 "Installing patched DLLs..."
+        gauge_step 75 "Downloading patched binaries..."
+        IN_GAUGE=1
         dbg "run_gauged_pipeline(subshell): calling install_patched_dlls"
-        if ! install_patched_dlls "$dest" >/dev/null; then
+        if ! install_patched_dlls "$dest" 2>>"$DEBUG_LOG"; then
             dbg "run_gauged_pipeline(subshell): install_patched_dlls FAILED"
             echo "Failed to install patched DLLs from the somnilux release." > "$error_file"
             exit 1
         fi
+        IN_GAUGE=0
         dbg "run_gauged_pipeline(subshell): install_patched_dlls done"
 
         if [ -n "$prefix" ] && [ -d "$prefix" ]; then
@@ -1133,6 +1185,9 @@ UMU_RUN="$UMU_RUN_BIN"
 LAUNCHER="$launcher_path"
 LAUNCH_LOG="$LAUNCH_LOG"
 OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
+PATHS_CONF="$PATHS_CACHE"
+SUPPORTED_BASE_URL="$SUPPORTED_BASE_URL"
+PROJECT_URL="$PROJECT_URL"
 GAME_ID="umu-somnium"
 YTDLP_EXTRACTOR_ARGS="youtube:player_client=android"
 EOF
@@ -1426,8 +1481,99 @@ setup_openxr_env() {
     fi
 }
 
+conf_value() {
+    local want="$1" key value
+    [ -r "$PATHS_CONF" ] || return 1
+    while IFS='=' read -r key value; do
+        if [ "$key" = "$want" ]; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    done < "$PATHS_CONF"
+    return 1
+}
+
+# Numeric major.minor compare. Anything not shaped like that is treated as not
+# newer, so a hand-edited paths.conf cannot produce a notice on every launch.
+version_gt() {
+    local new="$1" old="$2" nmaj nmin omaj omin
+    case "$new" in *.*) ;; *) return 1 ;; esac
+    case "$old" in *.*) ;; *) return 1 ;; esac
+    nmaj=${new%%.*}; nmin=${new#*.}
+    omaj=${old%%.*}; omin=${old#*.}
+    case "$nmaj$nmin$omaj$omin" in ''|*[!0-9]*) return 1 ;; esac
+    if [ "$nmaj" -ne "$omaj" ]; then
+        [ "$nmaj" -gt "$omaj" ]
+        return
+    fi
+    [ "$nmin" -gt "$omin" ]
+}
+
+# Short timeouts throughout: this runs before every launch, and being offline
+# must cost a moment rather than the launch itself.
+update_available() {
+    local installed_script installed_build installed_format
+    installed_script=$(conf_value script) || return 1
+    installed_build=$(conf_value build) || installed_build=""
+    installed_format=$(conf_value format) || installed_format=""
+    [ -n "$installed_script" ] || return 1
+
+    local latest_script
+    latest_script=$(curl -fsSL --connect-timeout 3 --max-time 5 \
+        "$SUPPORTED_BASE_URL/script.txt" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$latest_script" ] && version_gt "$latest_script" "$installed_script"; then
+        log "update check: script $installed_script -> $latest_script"
+        return 0
+    fi
+
+    case "$installed_format" in ''|*[!0-9]*) return 1 ;; esac
+
+    local compat fmt tag newest_format=0 newest_build=""
+    compat=$(curl -fsSL --connect-timeout 3 --max-time 5 \
+        "$SUPPORTED_BASE_URL/compat.txt" 2>/dev/null) || return 1
+    [ -n "$compat" ] || return 1
+    while IFS=: read -r fmt tag; do
+        case "$fmt" in ''|\#*|*[!0-9]*) continue ;; esac
+        [ -n "$tag" ] || continue
+        newest_format="$fmt"
+        [ "$fmt" -eq "$installed_format" ] && newest_build="$tag"
+    done <<< "$compat"
+
+    if [ "$newest_format" -gt "$installed_format" ]; then
+        log "update check: archive format $newest_format published, this install is $installed_format"
+        return 0
+    fi
+    if [ -n "$installed_build" ] && [ -n "$newest_build" ] &&
+       [ "$newest_build" != "$installed_build" ]; then
+        log "update check: build $installed_build -> $newest_build"
+        return 0
+    fi
+
+    log "update check: up to date"
+    return 1
+}
+
+notify_update() {
+    local i
+    say "A new update is available. For more information visit $PROJECT_URL"
+    if [ "$INTERACTIVE" = 1 ]; then
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            printf '\r  Continuing to Somnium Space Launcher in (%d seconds).... ' "$i" >&3
+            if read -r -t 1; then
+                break
+            fi
+        done
+        printf '\r%*s\r' 60 '' >&3
+    fi
+    say "Continuing to Somnium Space Launcher..."
+    say ""
+}
+
 say "Starting Somnium Space Launcher"
 say ""
+if update_available; then
+    notify_update
+fi
 log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
 if ! stop_existing_session; then

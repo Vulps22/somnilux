@@ -79,6 +79,15 @@ installer only installs a build laid out the way it expects.
   mistake on my end rather than anything you did, so please
   [open an issue](https://github.com/Vulps22/somnilux/issues).
 
+### Update notices
+
+Starting Somnium checks whether a newer Somnilux has been published, and says
+so before carrying on to the launcher. It waits ten seconds, or presses on
+straight away if you hit Enter. Nothing is downloaded or changed — updating is
+still running the installer yourself.
+
+If you're offline it stays quiet and launches as usual.
+
 ## The launch window
 
 Starting Somnium opens a terminal window telling you what it's doing:
@@ -264,10 +273,11 @@ plays media.
 - `scripts/build-artifacts.sh` — builds every binary a release ships: the Wine
   DLLs from both trees above, and ffmpeg. A developer tool, never part of a
   release.
-- `supported/` — the Proton and Wine versions this project recommends, and
-  which published binaries each version of the installer is able to use. All
-  fetched by `install.sh` at run time, so updates don't require a new script
-  release.
+- `supported/` — the Proton and Wine versions this project recommends, the
+  current script release, and which published binaries each version of the
+  installer is able to use. Fetched at run time by `install.sh`, and by the
+  launch script when it checks for updates, so publishing an update doesn't
+  require a new script release just to announce it.
 
 ## License
 

@@ -1,0 +1,100 @@
+name: Record script version
+
+# When an installer release is published, ask the published script what version
+# it is and record it in supported/script.txt, which the generated launch.sh
+# reads to tell people an update is out.
+#
+# The version comes from running install.sh --version on the asset that was
+# actually released, never from the tag, so script.txt cannot end up claiming
+# a version the script itself does not report.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check this release carries an installer
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          # A prerelease is opt-in, so it must not tell every existing user
+          # that an update is waiting for them.
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "is_installer=false" >> "$GITHUB_OUTPUT"
+            echo "$TAG is a prerelease; leaving script.txt alone."
+            exit 0
+          fi
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+                     --json assets --jq '.assets[].name')
+          if grep -qx 'install.sh' <<< "$assets"; then
+            echo "is_installer=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_installer=false" >> "$GITHUB_OUTPUT"
+            echo "No install.sh in $TAG; this is not an installer release."
+          fi
+
+      - name: Check out main
+        if: steps.check.outputs.is_installer == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Ask the published script what version it is
+        if: steps.check.outputs.is_installer == 'true'
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern install.sh --dir "$work"
+          chmod +x "$work/install.sh"
+          ver=$("$work/install.sh" --version | tr -d '[:space:]')
+          case "$ver" in
+            ''|*.*.*|*[!0-9.]*|.*|*.)
+              echo "::error::install.sh --version in $TAG is not major.minor (got '$ver')"
+              exit 1
+              ;;
+            *.*) ;;
+            *)
+              echo "::error::install.sh --version in $TAG is not major.minor (got '$ver')"
+              exit 1
+              ;;
+          esac
+          echo "install.sh reports version $ver"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Record it in script.txt
+        if: steps.check.outputs.is_installer == 'true'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          VER: ${{ steps.version.outputs.ver }}
+        run: |
+          set -euo pipefail
+          current=$(tr -d '[:space:]' < supported/script.txt 2>/dev/null || true)
+          if [ "$current" = "$VER" ]; then
+            echo "script.txt already says $VER"
+            exit 0
+          fi
+          # Replaced, not appended: unlike compat.txt this names the one
+          # current release, and launch.sh compares against exactly it.
+          printf '%s\n' "$VER" > supported/script.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supported/script.txt
+          git commit \
+            -m "Record $TAG as script version $VER" \
+            -m "Added automatically when the release was published. The version comes from running install.sh --version on the published asset, so this file and the release it describes cannot disagree."
+          git push origin main
