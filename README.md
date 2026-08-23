@@ -66,6 +66,19 @@ This release is verified working with Somnium Space **3.2.5**. If you're
 on a newer version and still running into problems, check whether a newer
 release of this script is available.
 
+### If it says the fixes don't match
+
+The patched binaries are published separately from the script, and each
+installer only installs a build laid out the way it expects.
+
+- **"Update needed"** — newer fixes exist than this script knows how to
+  install. It carries on with the newest it can use; grab the latest release
+  when you want the rest.
+- **"No compatible fixes found"** or **"Incompatible fixes"** — nothing
+  published matches this script, so nothing has been installed. That's a
+  mistake on my end rather than anything you did, so please
+  [open an issue](https://github.com/Vulps22/somnilux/issues).
+
 ## The launch window
 
 Starting Somnium opens a terminal window telling you what it's doing:
@@ -141,6 +154,22 @@ working, continuing will close it and start over:
 Only processes belonging to this Somnilux prefix are stopped; other Wine or
 Proton games running at the same time are left alone.
 
+## Video playback
+
+In-world screens play, with sound and ARS reactive lighting. What works today:
+
+| Source | Video | Audio | Notes |
+| --- | --- | --- | --- |
+| YouTube | ✅ | ✅ | 360p |
+| RTSP / RTSPT | ✅ | ❌ | How VRCDN streams to in-world players |
+| VRCDN over HTTPS | ❌ | ❌ | Doesn't load |
+| Twitch | ❌ | ❌ | Doesn't load |
+
+YouTube is capped at 360p because Somnium asks `yt-dlp` for a single stream,
+and 360p is the best YouTube still serves with the audio already in it —
+everything above that is video-only and would play silently. Sound seemed the
+better trade.
+
 ## Tested distributions
 
 Somnilux has been tested on the following Linux distributions:
@@ -168,8 +197,8 @@ Somnium Space has been confirmed to run with the following OpenXR runtimes:
 
 | Runtime | Stable | Headsets | Notes |
 | --- | --- | --- | --- |
-| SteamVR | ✅ | Quest 3 (via Steam Link) | |
-| WiVRn | ⚠️ | | Untested; Flatpak installs are detected automatically |
+| SteamVR | ✅ | Quest 3 | |
+| WiVRn | ✅ | Quest3, Quest 3s |  |
 | Monado | ⚠️ | | Untested |
 
 Untested doesn't mean broken — just that nobody has reported back yet. If
@@ -184,30 +213,60 @@ from reports.
 - **Viewing your desktop from inside Somnium Space can crash the client**
   on some distributions.
 - **The social app doesn't work in the launcher.**
+- **Video playback is partial** — see [Video playback](#video-playback) for
+  what plays and what doesn't. These fixes are a large job and arrive in
+  stages as they become available.
 
 ## What's fixed
+
+**Connecting to Somnium.** Wine couldn't do mutual-TLS client certificate
+authentication, which the launcher and the Game Service need both between
+themselves and against Somnium's servers.
 
 - Fixed `CertNameToStrW` not prefixing unrecognized certificate OIDs with `OID.` (crypt32)
 - Added client-certificate requests over local mutual-TLS connections (secur32)
 - Added async pause/resume support so a client can respond to a certificate request mid-handshake (secur32)
 - Implemented `SECPKG_ATTR_ISSUER_LIST_EX` so a client can actually select which certificate to send (secur32)
 
+**Video playback.** Five separate faults, each one hiding the next.
+
+- Stopped `IMFSchemeHandler::BeginCreateObject` downloading the whole resource
+  before returning, which deadlocked the media engine and froze the client (winedmo)
+- Remote http(s) media is opened by URL instead of being fetched in full first —
+  minutes of waiting, and 185MB, for one video (winedmo)
+- Added support for RTSP and RTSPT streams (winedmo)
+- Built ffmpeg with `--enable-libdav1d`, so AV1 video decodes at all — GE-Proton's
+  own build has no software AV1 decoder and fails every frame
+- Pointed `yt-dlp` at a client that still serves picture and sound in one stream,
+  so YouTube videos have audio (kernelbase)
+
+The deadlock, the pre-download and the missing AV1 decoder are bugs in stock
+GE-Proton rather than anything specific to Somnium — they affect any app that
+plays media.
+
 ## Layout
 
-- `patches/` — the actual Wine source patches (`git format-patch` output,
-  apply with `git am`), plus `BASE_COMMIT.txt` recording the exact upstream
-  Wine commit they apply against. This is also how the LGPL "corresponding
-  source" obligation for the prebuilt binaries below is satisfied: the
-  unmodified base is already public (`wine-mirror/wine` /
-  `gitlab.winehq.org/wine/wine`), and our diff on top of it is here.
+- `patches/` — the Wine source patches (`git format-patch` output, apply with
+  `git am`), split by the tree they apply to. `patches/wine/` goes on upstream
+  Wine; `patches/ge/` goes on GE-Proton's tree, because the video fixes touch
+  code that only exists once GE's own media rework has been applied.
+  `BASE_COMMIT.txt` records both base commits and how to rebuild either tree.
+  This is also how the LGPL "corresponding source" obligation for the prebuilt
+  binaries below is satisfied: the unmodified base is already public
+  (`wine-mirror/wine` / `gitlab.winehq.org/wine/wine`), and our diff on top of
+  it is here.
 - `scripts/install.sh` — the setup script: downloads a GE-Proton release and
-  its own copy of `umu-run`, downloads this project's prebuilt patched
-  `secur32`/`crypt32`/`rsaenh`, and wires up a working prefix. Handles both
-  a fresh install and repairing an existing one. It also generates
+  its own copy of `umu-run`, installs this project's prebuilt patched binaries
+  over that Proton, and wires up a working install. Handles both a fresh
+  install and repairing an existing one. It also generates
   `~/.local/share/somnilux/launch.sh`, which is what the desktop shortcut
   actually runs.
-- `supported/` — the Proton and Wine versions this project recommends,
-  fetched by `install.sh` at run time so updates don't require a new script
+- `scripts/build-artifacts.sh` — builds every binary a release ships: the Wine
+  DLLs from both trees above, and ffmpeg. A developer tool, never part of a
+  release.
+- `supported/` — the Proton and Wine versions this project recommends, and
+  which published binaries each version of the installer is able to use. All
+  fetched by `install.sh` at run time, so updates don't require a new script
   release.
 
 ## License
