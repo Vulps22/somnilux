@@ -12,6 +12,8 @@ dbg() {
     printf '[%03d] %s pid=%s %s\n' "$DEBUG_N" "$(date +%H:%M:%S.%N)" "$$" "$1" >> "$DEBUG_LOG"
 }
 
+SCRIPT_VERSION="3.1"
+PROJECT_URL="https://github.com/Vulps22/somnilux"
 BACKTITLE="somnilux — github.com/Vulps22/somnilux"
 CURL_TIMEOUT_OPTS=(--connect-timeout 10 --max-time 30)
 CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
@@ -50,6 +52,9 @@ ARCHIVE_DIRS=(x86_64-unix x86_64-windows x86_64-linux-gnu)
 PATHS_CACHE="$HOME/.local/share/somnilux/paths.conf"
 CACHED_PREFIX=""
 CACHED_PROTON=""
+CACHED_SCRIPT=""
+CACHED_BUILD=""
+CACHED_FORMAT=""
 
 # Parsed by hand rather than sourced -- this file records paths, and a stray
 # line in it should not become something this script executes.
@@ -60,25 +65,37 @@ cache_load() {
         case "$key" in
             prefix) CACHED_PREFIX="$value" ;;
             proton) CACHED_PROTON="$value" ;;
+            script) CACHED_SCRIPT="$value" ;;
+            build)  CACHED_BUILD="$value" ;;
+            format) CACHED_FORMAT="$value" ;;
         esac
     done < "$PATHS_CACHE"
-    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON]"
+    dbg "cache_load: prefix=[$CACHED_PREFIX] proton=[$CACHED_PROTON] script=[$CACHED_SCRIPT] build=[$CACHED_BUILD] format=[$CACHED_FORMAT]"
     [ -n "$CACHED_PREFIX" ]
 }
 
 # cache_save prefix proton
+# Also records what this run installed, so launch.sh can tell whether anything
+# newer has been published since.
 cache_save() {
     local prefix="$1" proton="$2"
-    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ]; then
+    if [ "$prefix" = "$CACHED_PREFIX" ] && [ "$proton" = "$CACHED_PROTON" ] &&
+       [ "$SCRIPT_VERSION" = "$CACHED_SCRIPT" ] && [ "$DLL_RELEASE_TAG" = "$CACHED_BUILD" ] &&
+       [ "$ARCHIVE_FORMAT" = "$CACHED_FORMAT" ]; then
         dbg "cache_save: unchanged, not rewriting"
         return 0
     fi
     mkdir -p "$(dirname "$PATHS_CACHE")" || return 0
-    if printf 'prefix=%s\nproton=%s\n' "$prefix" "$proton" > "$PATHS_CACHE.tmp" 2>/dev/null &&
+    if printf 'prefix=%s\nproton=%s\nscript=%s\nbuild=%s\nformat=%s\n' \
+              "$prefix" "$proton" "$SCRIPT_VERSION" "$DLL_RELEASE_TAG" "$ARCHIVE_FORMAT" \
+              > "$PATHS_CACHE.tmp" 2>/dev/null &&
        mv "$PATHS_CACHE.tmp" "$PATHS_CACHE" 2>/dev/null; then
-        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton]"
+        dbg "cache_save: wrote prefix=[$prefix] proton=[$proton] script=[$SCRIPT_VERSION] build=[$DLL_RELEASE_TAG] format=[$ARCHIVE_FORMAT]"
         CACHED_PREFIX="$prefix"
         CACHED_PROTON="$proton"
+        CACHED_SCRIPT="$SCRIPT_VERSION"
+        CACHED_BUILD="$DLL_RELEASE_TAG"
+        CACHED_FORMAT="$ARCHIVE_FORMAT"
     else
         dbg "cache_save: could not write $PATHS_CACHE, continuing anyway"
         rm -f "$PATHS_CACHE.tmp" 2>/dev/null || true
