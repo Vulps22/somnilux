@@ -1175,6 +1175,9 @@ UMU_RUN="$UMU_RUN_BIN"
 LAUNCHER="$launcher_path"
 LAUNCH_LOG="$LAUNCH_LOG"
 OPENXR_OVERRIDE_CONF="$OPENXR_OVERRIDE_CONF"
+PATHS_CONF="$PATHS_CACHE"
+SUPPORTED_BASE_URL="$SUPPORTED_BASE_URL"
+PROJECT_URL="$PROJECT_URL"
 GAME_ID="umu-somnium"
 YTDLP_EXTRACTOR_ARGS="youtube:player_client=android"
 EOF
@@ -1468,8 +1471,83 @@ setup_openxr_env() {
     fi
 }
 
+conf_value() {
+    local want="$1" key value
+    [ -r "$PATHS_CONF" ] || return 1
+    while IFS='=' read -r key value; do
+        if [ "$key" = "$want" ]; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    done < "$PATHS_CONF"
+    return 1
+}
+
+# Short timeouts throughout: this runs before every launch, and being offline
+# must cost a moment rather than the launch itself.
+update_available() {
+    local installed_script installed_build installed_format
+    installed_script=$(conf_value script) || return 1
+    installed_build=$(conf_value build) || installed_build=""
+    installed_format=$(conf_value format) || installed_format=""
+    [ -n "$installed_script" ] || return 1
+
+    local latest_script
+    latest_script=$(curl -fsSL --connect-timeout 3 --max-time 5 \
+        "$SUPPORTED_BASE_URL/script.txt" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$latest_script" ] && [ "$latest_script" != "$installed_script" ]; then
+        log "update check: script $installed_script -> $latest_script"
+        return 0
+    fi
+
+    case "$installed_format" in ''|*[!0-9]*) return 1 ;; esac
+
+    local compat fmt tag newest_format=0 newest_build=""
+    compat=$(curl -fsSL --connect-timeout 3 --max-time 5 \
+        "$SUPPORTED_BASE_URL/compat.txt" 2>/dev/null) || return 1
+    [ -n "$compat" ] || return 1
+    while IFS=: read -r fmt tag; do
+        case "$fmt" in ''|\#*|*[!0-9]*) continue ;; esac
+        [ -n "$tag" ] || continue
+        newest_format="$fmt"
+        [ "$fmt" -eq "$installed_format" ] && newest_build="$tag"
+    done <<< "$compat"
+
+    if [ "$newest_format" -gt "$installed_format" ]; then
+        log "update check: archive format $newest_format published, this install is $installed_format"
+        return 0
+    fi
+    if [ -n "$installed_build" ] && [ -n "$newest_build" ] &&
+       [ "$newest_build" != "$installed_build" ]; then
+        log "update check: build $installed_build -> $newest_build"
+        return 0
+    fi
+
+    log "update check: up to date"
+    return 1
+}
+
+notify_update() {
+    local i
+    say "A new update is available. For more information visit $PROJECT_URL"
+    if [ "$INTERACTIVE" = 1 ]; then
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            printf '\r  Continuing to Somnium Space Launcher in (%d seconds).... ' "$i" >&3
+            if read -r -t 1; then
+                break
+            fi
+        done
+        printf '\r%*s\r' 60 '' >&3
+    fi
+    say "Continuing to Somnium Space Launcher..."
+    say ""
+}
+
 say "Starting Somnium Space Launcher"
 say ""
+if update_available; then
+    notify_update
+fi
 log "prefix:  $PREFIX_CANON"
 log "proton:  $PROTON_DIR"
 if ! stop_existing_session; then
