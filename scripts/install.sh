@@ -1497,6 +1497,22 @@ conf_value() {
     return 1
 }
 
+# Numeric major.minor compare. Anything not shaped like that is treated as not
+# newer, so a hand-edited paths.conf cannot produce a notice on every launch.
+version_gt() {
+    local new="$1" old="$2" nmaj nmin omaj omin
+    case "$new" in *.*) ;; *) return 1 ;; esac
+    case "$old" in *.*) ;; *) return 1 ;; esac
+    nmaj=${new%%.*}; nmin=${new#*.}
+    omaj=${old%%.*}; omin=${old#*.}
+    case "$nmaj$nmin$omaj$omin" in ''|*[!0-9]*) return 1 ;; esac
+    if [ "$nmaj" -ne "$omaj" ]; then
+        [ "$nmaj" -gt "$omaj" ]
+        return
+    fi
+    [ "$nmin" -gt "$omin" ]
+}
+
 # Short timeouts throughout: this runs before every launch, and being offline
 # must cost a moment rather than the launch itself.
 update_available() {
@@ -1509,7 +1525,7 @@ update_available() {
     local latest_script
     latest_script=$(curl -fsSL --connect-timeout 3 --max-time 5 \
         "$SUPPORTED_BASE_URL/script.txt" 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$latest_script" ] && [ "$latest_script" != "$installed_script" ]; then
+    if [ -n "$latest_script" ] && version_gt "$latest_script" "$installed_script"; then
         log "update check: script $installed_script -> $latest_script"
         return 0
     fi
