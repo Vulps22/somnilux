@@ -138,7 +138,42 @@ mode. See
 If a step does not apply to your change, skip it — nobody needs to build DLLs
 to fix a typo.
 
-### 4. Regenerate the patches — Wine changes only
+### 4. Update the documentation
+
+**If your change alters what a user does or sees, update the page that says
+so — in the same pull request.**
+
+The project is fully documented, so there is almost always an existing page
+rather than a new one to write. Find it on the
+[documentation site](https://vulps22.github.io/somnilux/) and edit the
+matching file under `docs/`:
+
+| You changed | Page |
+| --- | --- |
+| A flag on `install.sh` | `docs/install/options.md` |
+| What the installer asks or does | `docs/install/installing.md` |
+| Launch behaviour, runtimes, video | `docs/run/` |
+| A new failure users can hit | `docs/troubleshooting/common-failures.md` |
+| A limitation you could not fix | `docs/troubleshooting/known-issues.md` |
+| How the project is built or released | `docs/contributing/` |
+
+`mkdocs build --strict` must pass. It fails on a link to a missing page *or*
+to a heading that no longer exists, so it catches most mistakes for you.
+
+**When you do not need to touch the docs:** a fix that restores behaviour the
+docs already describe, an internal refactor, or a developer tool nobody
+installs. If the documentation was already true and still is, leave it alone.
+
+Write for someone using Somnilux, not someone reviewing your patch — what to
+do, not what you changed. If you would rather someone else worded it, say so
+on the pull request and it will be picked up; a good change is not going to be
+turned away over phrasing.
+
+Documentation publishes when a release reaches `main`, so your page goes live
+at the same moment your change does.
+
+
+### 5. Regenerate the patches — Wine changes only
 
 If you changed the Wine source, regenerate `patches/` with `git format-patch`
 so the shipped patches match what the binaries were built from, and update
@@ -146,7 +181,7 @@ so the shipped patches match what the binaries were built from, and update
 
 Skip this entirely for script or documentation changes.
 
-### 5. Open a pull request
+### 6. Open a pull request
 
 **Target `main` unless the issue names a branch to use instead.**
 
@@ -223,7 +258,8 @@ Most of these are a quick fix rather than a closed door.
 - Version constants or `supported/` files changed — those are release-time
   maintainer changes
 - Code comments that explain what the code already says
-- `mkdocs build --strict` fails on a docs change
+- User-facing change with no documentation update, and no reason given
+- `mkdocs build --strict` fails
 - No statement of how it was tested
 
 **Closed**
