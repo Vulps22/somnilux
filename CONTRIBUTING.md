@@ -202,9 +202,32 @@ from you. Do not close and reopen a pull request to change its target.
 Say what you changed, why, and how you tested it. Reference the issue with
 `GH-16`, without a closing keyword.
 
+## Using an AI assistant
+
+**Use one if you want to. Nobody is going to think less of you for it, and
+there is nothing to hide.**
+
+Every pull request here gets reviewed by Claude as well as by a human, so an
+assistant is already part of the process on this side. Running your own over
+your work first is sensible, not suspect.
+
+The bar is the same either way: **you understand what you are submitting and
+can answer questions about it.** That is the only thing being asked. Code you
+cannot explain is a problem whether a model wrote it or you did at 3am.
+
+Two things worth knowing, neither of them a rule:
+
+- Wine's behaviour is badly represented in training data, and models will
+  invent plausible-sounding APIs and flags that do not exist. Read the actual
+  Wine source; it is right there and it is the only reliable answer.
+- The house style is light on comments and prose. Assistants tend to be
+  generous with both. Trimming is expected and is not a criticism.
+
+
 ## Review
 
-A maintainer reviews it. Expect questions — they are about understanding the
+A maintainer reviews it, and so does Claude. Expect questions — they are
+about understanding the change, not about doubting you.
 change, not about doubting you.
 
 ### After approval, expect a wait
