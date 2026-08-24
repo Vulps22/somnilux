@@ -163,6 +163,27 @@ Say what you changed, why, and how you tested it. Reference the issue with
 A maintainer reviews it. Expect questions — they are about understanding the
 change, not about doubting you.
 
+### After approval, expect a wait
+
+**Approved does not mean merged.** Approval means your work is accepted; it is
+merged when a release is put together, which may be days or weeks later.
+
+Releases are batched on purpose. If every fix shipped the moment it was
+approved, users would get an update notice for a logging flag on Monday, a
+Twitch fix on Tuesday and an audio fix on Wednesday, and would quite
+reasonably start ignoring them. Batching is what keeps the notice worth
+reading.
+
+So a pull request of yours sitting approved and untouched is the system
+working, not you being forgotten. Ask on the issue any time if you want to
+know where it is in the queue.
+
+Occasionally an approved pull request is pulled back out of a release — if
+`main` has moved and it no longer merges cleanly, it is dropped to the next
+release rather than resolved in a hurry. You will be told on the pull request
+if that happens. It is not a rejection.
+
+
 ### Where it actually lands
 
 Approved work does not necessarily merge straight to `main`. If it is being
