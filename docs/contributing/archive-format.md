@@ -1,5 +1,10 @@
 # Archive format
 
+!!! info "Maintainer reference"
+    Contributing a change? Start with
+    [CONTRIBUTING.md](https://github.com/Vulps22/somnilux/blob/main/CONTRIBUTING.md).
+    This page documents how the project is built and released.
+
 The installer script and the patched binaries are released separately, so any
 version of the script can meet any published archive. The format number is
 what stops an old script installing an archive it doesn't understand.
