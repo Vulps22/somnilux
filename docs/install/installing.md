@@ -125,9 +125,11 @@ menu. Launching it opens a terminal window showing what it's doing — see
 [The launch window](../run/launch-window.md).
 
 !!! warning "Connect your headset before that first launch"
-    Somnilux detects your OpenXR runtime at the moment you start Somnium, so
-    have your headset connected and your runtime running **first**. Starting
-    them afterwards is the most common reason detection fails.
+    Have the headset connected to the PC and awake, with your runtime seeing
+    it, **before** you start Somnium. Starting the runtime alone is not
+    enough — detection runs once at launch, and a runtime with no headset
+    attached has nothing to report. See
+    [VR runtimes](../run/vr-runtimes.md).
 
 If the menu entry seems to do nothing at all, the answer is almost always in:
 

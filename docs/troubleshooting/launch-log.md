@@ -66,7 +66,7 @@ ntsync: up and running.
 umu starting the container and Proton starting Wine. `ntsync: up and running`
 is a good sign. The launch is working by this point.
 
-## Normal noise you can ignore
+## Expected lines
 
 These look alarming and are not:
 
@@ -76,12 +76,39 @@ These look alarming and are not:
 | `No early stage global protonfix found` | No per-game workarounds needed. Expected. |
 | `Proton: Error: unable to use parent for game drive, path ...` | Proton couldn't map a parent directory as a drive. Harmless; the launch continues. |
 | `Executable is a unix path, launching with 'umu.exe'` | Normal for a non-Steam launch. |
-| `fixme:` lines from Wine | Unimplemented Wine functions. Almost always irrelevant. |
 
-Wine is chatty. A `fixme:` or `err:` line is not evidence of the failure on
-its own — look for where the log *stops*, not for the scariest-looking line.
+They appear in every healthy launch, including the annotated one above.
+
+## `fixme:` lines — please do report these
+
+A `fixme:` line means Somnium called a Windows function that **Wine hasn't
+implemented**, or has only stubbed out. Wine carries on regardless, which is
+why a launch full of them can still work perfectly.
+
+Don't let that make you dismiss them. **Every fix Somnilux ships started as
+something Wine wasn't doing properly**, and an unimplemented function is the
+most direct signal that a gap exists. A `fixme:` in the moments before
+something breaks is often naming the cause outright.
+
+So, the useful stance:
+
+- **Don't chase them yourself.** Wine is chatty, plenty of stubs are genuinely
+  harmless, and a `fixme:` is not proof it caused *your* problem.
+- **Don't filter them out of a report.** Attach the log whole. Which ones
+  matter is exactly the judgement that's easier to make with the full picture,
+  and easier for me than for you.
+- **If you can tie one to a broken feature, say so.** "These lines appeared the
+  instant the screen went black" is a genuinely valuable report — that's the
+  shape of how the video and certificate bugs were found.
+
+`err:` lines are worth the same treatment. Some are routine; some name a real
+failure.
 
 ## When it goes wrong
+
+Look for where the log **stops**, not for the scariest-looking line. Wine's
+output is verbose by design, and the last thing that happened is usually more
+informative than the loudest thing that happened.
 
 **The log ends right after `Starting Somnium Space Launcher`** — Somnilux
 failed before reaching umu. Check the `prefix` and `proton` lines exist and

@@ -60,18 +60,6 @@ If neither is installed the entry is created **without** an icon. Everything
 works; it just looks plain. Install ImageMagick and run a repair if you want
 the icon.
 
-## PATH and desktop entries
-
-A `.desktop` entry doesn't inherit the `PATH` from your shell profile. This
-is why Somnilux calls its vendored `umu-run` by absolute path rather than
-relying on it being on `PATH`.
-
-It's worth knowing because it was a real failure: on Mint, a system
-`umu-launcher` built into `~/.local/bin` was invisible to the desktop entry,
-and with no terminal attached the launch failed silently. Vendoring `umu-run`
-removed that class of problem — but if you're debugging something similar,
-that's the mechanism.
-
 ## Immutable and atomic distributions
 
 Bazzite, Silverblue and similar are untested. Nothing Somnilux does needs to

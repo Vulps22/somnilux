@@ -25,10 +25,11 @@ made reachable from inside the container. If this says something unexpected,
 or `none detected` when you expected a headset, that's your problem right
 there.
 
-The usual cause is launching before the headset was ready. Detection runs
-once, at launch, so your headset must be connected and your runtime already
-running **before** you start Somnium. Close it, bring the runtime up, and
-launch again — see [VR runtimes and headsets](vr-runtimes.md).
+The usual cause is launching before the headset was connected. Detection runs
+once, at launch, and a runtime with no headset attached to it has nothing to
+report — so starting the runtime alone is not enough. Close Somnium, connect
+the headset, and launch again — see
+[VR runtimes and headsets](vr-runtimes.md).
 
 **`Launching:`** — the exact command being run, with the Proton path, prefix,
 and launcher executable. Useful in a bug report, and useful if you want to see
