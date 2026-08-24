@@ -148,8 +148,12 @@ Skip this entirely for script or documentation changes.
 
 ### 5. Open a pull request
 
-**Target the active release branch, not `main`.** A maintainer will tell you
-which one on the issue; ask there if it is not obvious.
+**Target `main` unless the issue names a branch to use instead.**
+
+You do not need to know anything about how releases are structured. If your
+work needs to land somewhere other than `main`, a maintainer will change the
+target for you — that is a single action on their side and requires nothing
+from you. Do not close and reopen a pull request to change its target.
 
 Say what you changed, why, and how you tested it. Reference the issue with
 `GH-16`, without a closing keyword.
@@ -159,9 +163,24 @@ Say what you changed, why, and how you tested it. Reference the issue with
 A maintainer reviews it. Expect questions — they are about understanding the
 change, not about doubting you.
 
-Approved work merges into the release branch. Nothing reaches `main` except a
-release branch merge, and that is when the issue closes — so your issue
-staying open after your pull request is merged is expected, not an oversight.
+### Where it actually lands
+
+Approved work does not necessarily merge straight to `main`. If it is being
+grouped with other changes for a release, a maintainer cuts a release branch
+at that point and retargets your pull request onto it. Release branches are
+created when there is something to put in them, not in advance, which is why
+there may be none to target when you open.
+
+Either way this is handled for you, and the only visible difference is which
+branch the merge button says.
+
+### When your issue closes
+
+**When the work reaches `main`** — which may be some time after your pull
+request is merged, if it landed on a release branch first.
+
+Your issue staying open after a merge is expected, not an oversight. Nobody
+has forgotten it.
 
 
 ## Why a PR gets rejected
@@ -173,7 +192,7 @@ Most of these are a quick fix rather than a closed door.
 - Branch name does not match the format
 - Commit messages do not match the format
 - Closing keywords in a commit message or the pull request description
-- Targets `main` instead of the active release branch
+- Closed and reopened to change the target branch, instead of asking
 - **Regression commits.** A commit that adds something and a later commit that
   removes it should not both be in the tree — revert or rebase so the mistake
   was never there. History is a record of intent, not of flailing.
