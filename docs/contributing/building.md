@@ -1,5 +1,10 @@
 # Building from source
 
+!!! info "Maintainer reference"
+    Contributing a change? Start with
+    [CONTRIBUTING.md](https://github.com/Vulps22/somnilux/blob/main/CONTRIBUTING.md).
+    This page documents how the project is built and released.
+
 Everything Somnilux ships can be rebuilt from public sources.
 `scripts/build-artifacts.sh` does the whole build in one run — the patched
 Wine DLLs from two separate trees, and ffmpeg.

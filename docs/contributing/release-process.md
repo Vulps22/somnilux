@@ -1,5 +1,14 @@
 # Release process
 
+!!! info "This is internal maintainer process"
+    Releases are cut by maintainers. If you are contributing a change, none of
+    this applies to you — follow
+    [CONTRIBUTING.md](https://github.com/Vulps22/somnilux/blob/main/CONTRIBUTING.md)
+    instead, which covers claiming an issue, branch and commit naming, testing,
+    and opening a pull request.
+
+    This page is here so the process is written down rather than remembered.
+
 Three things ship independently — the installer script, the patched binaries,
 and the `supported/` metadata on `main`. They have to go out in the right
 order.

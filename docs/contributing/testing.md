@@ -1,5 +1,10 @@
 # Testing a build
 
+!!! info "Maintainer reference"
+    Contributing a change? Start with
+    [CONTRIBUTING.md](https://github.com/Vulps22/somnilux/blob/main/CONTRIBUTING.md).
+    This page documents how the project is built and released.
+
 ## Installing a local archive
 
 ```sh
