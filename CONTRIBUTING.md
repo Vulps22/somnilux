@@ -13,13 +13,39 @@ issue, [open one](https://github.com/Vulps22/somnilux/issues/new/choose)
 first — that is not bureaucracy, it is the discussion that stops you building
 the wrong thing.
 
+## Which issues to pick up
+
+**Only take issues labelled `Ready To Work`.**
+
+That label means the issue has been submitted, reviewed, refined, and is
+genuinely going to be worked on. Anything without it may still be closed as a
+duplicate, or as something this project is not going to do — and there is
+nothing worse than finishing work on an issue that was never going to be
+accepted.
+
+The three labels that track where an issue is:
+
+| Label | Meaning |
+| --- | --- |
+| `Ready To Work` | Refined and accepted. Free to claim. |
+| `Working` | Claimed and assigned. Someone is on it. |
+| `Ready And Waiting` | Done, with an approved pull request, waiting for a release branch. |
+
+An issue with none of these has not been triaged yet. You are welcome to
+comment on it, but do not start building.
+
 ## Claiming an issue
 
 **Comment on the issue** saying you would like to take it. That is all.
 
 GitHub does not let you assign yourself without write access, so a comment is
-the claim. Once you have commented, a maintainer can assign the issue to you,
-which makes it visible to everyone else that it is taken.
+the claim. Once you have commented, a maintainer can assign the issue to you
+and set it to `Working`.
+
+**You will not be able to change the labels yourself.** Editing labels needs
+triage permission on the repository, which being an assignee does not grant.
+That is GitHub's rule rather than a lack of trust — a maintainer moves the
+issue through the labels, so you never have to think about it.
 
 Two things that keep this honest:
 
@@ -233,7 +259,9 @@ change, not about doubting you.
 ### After approval, expect a wait
 
 **Approved does not mean merged.** Approval means your work is accepted; it is
-merged when a release is put together, which may be days or weeks later.
+merged when a release is put together, which may be days or weeks later. The
+issue is labelled `Ready And Waiting` at this point, so you can see the
+difference between "still being looked at" and "done, queued for a release".
 
 Releases are batched on purpose. If every fix shipped the moment it was
 approved, users would get an update notice for a logging flag on Monday, a
