@@ -63,19 +63,39 @@ Branches are never deleted in this project, including after a clean merge.
 ## Commit messages
 
 ```
-(#16) Add verbose logging to the launch script
+GH-16 Add verbose logging to the launch script
 ```
 
-The issue reference in parentheses, then an imperative description of what
-that commit does.
+The issue reference, then an imperative description of what that commit does.
 
-**Do not start the line with a bare `#`.** Git treats a leading `#` as a
-comment character. `git commit` followed by
-typing `#16 - ...` in the editor silently discards the line. The parenthesised
-form avoids this entirely.
+**Use `GH-16`, not `#16`.** Both link the issue and both create a reference on
+its timeline, but a leading `#` is a comment character in git — running
+`git commit` and typing `#16 ...` in the editor silently discards the line.
+`GH-` is GitHub's own equivalent and has no such problem.
 
 Every commit must be **atomic and complete on its own** — the tree builds and
 runs at every commit, not just at the end of the branch.
+
+### Never use closing keywords
+
+Do not write `fixes`, `closes` or `resolves` (or `fix`/`close`/`resolve`,
+`fixed`/`closed`/`resolved`) immediately before an issue reference, in a
+commit message or a pull request description.
+
+Those close the issue automatically. **An issue is not closed until the work
+reaches `main`**, which happens when a release branch is merged — not when
+your pull request is approved, and not when it lands on a release branch.
+
+Reference the issue, do not resolve it:
+
+```
+GH-16 Add verbose logging to the launch script     correct
+Fixes GH-16: add verbose logging                   closes the issue early
+```
+
+Putting the reference first makes this hard to trigger by accident, but it is
+worth knowing why.
+
 
 ## Doing the work
 
@@ -128,18 +148,21 @@ Skip this entirely for script or documentation changes.
 
 ### 5. Open a pull request
 
-Target `main`. Say what you changed, why, and how you tested it. Link the
-issue.
+**Target the active release branch, not `main`.** A maintainer will tell you
+which one on the issue; ask there if it is not obvious.
+
+Say what you changed, why, and how you tested it. Reference the issue with
+`GH-16`, without a closing keyword.
 
 ## Review
 
 A maintainer reviews it. Expect questions — they are about understanding the
 change, not about doubting you.
 
-Approved PRs merge to `main` directly. If several related changes are being
-batched for a release, a maintainer may cut a release branch and merge them
-there instead; you do not need to do anything differently, and you will be
-told if it happens.
+Approved work merges into the release branch. Nothing reaches `main` except a
+release branch merge, and that is when the issue closes — so your issue
+staying open after your pull request is merged is expected, not an oversight.
+
 
 ## Why a PR gets rejected
 
@@ -149,6 +172,8 @@ Most of these are a quick fix rather than a closed door.
 
 - Branch name does not match the format
 - Commit messages do not match the format
+- Closing keywords in a commit message or the pull request description
+- Targets `main` instead of the active release branch
 - **Regression commits.** A commit that adds something and a later commit that
   removes it should not both be in the tree — revert or rebase so the mistake
   was never there. History is a record of intent, not of flailing.
