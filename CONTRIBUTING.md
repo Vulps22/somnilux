@@ -165,9 +165,18 @@ docs already describe, an internal refactor, or a developer tool nobody
 installs. If the documentation was already true and still is, leave it alone.
 
 Write for someone using Somnilux, not someone reviewing your patch — what to
-do, not what you changed. If you would rather someone else worded it, say so
-on the pull request and it will be picked up; a good change is not going to be
-turned away over phrasing.
+do, not what you changed.
+
+**Documentation is never held against you.** Awkwardly worded, in the wrong
+place, or forgotten entirely — it gets listed as a to-do on the pull request,
+talked through, and fixed. It is not a mark against your work and it is not a
+reason your change gets turned away. Prose is the cheapest thing in this
+project to correct.
+
+**Ask if you are not sure.** Maintainers are happy to guide and discuss where
+documentation does and does not need adjusting, in the pull request comments.
+"Does this need a docs change?" is a perfectly good question to open with, and
+a better use of everyone's time than guessing.
 
 Documentation publishes when a release reaches `main`, so your page goes live
 at the same moment your change does.
@@ -258,7 +267,6 @@ Most of these are a quick fix rather than a closed door.
 - Version constants or `supported/` files changed — those are release-time
   maintainer changes
 - Code comments that explain what the code already says
-- User-facing change with no documentation update, and no reason given
 - `mkdocs build --strict` fails
 - No statement of how it was tested
 
