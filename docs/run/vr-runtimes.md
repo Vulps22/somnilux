@@ -42,7 +42,7 @@ shared into the container automatically.
 | Runtime | Status | Headsets |
 | --- | --- | --- |
 | SteamVR | ✅ | Quest 3 |
-| WiVRn | ✅ | Quest 3, Quest 3S |
+| WiVRn | ✅ | Quest 3, Quest 3S, PICO 4 Ultra |
 | Monado | ⚠️ | — |
 
 Untested doesn't mean broken — it means nobody has reported back yet. These

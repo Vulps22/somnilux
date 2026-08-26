@@ -189,6 +189,7 @@ Somnilux has been tested on the following Linux distributions:
 | --- | --- | --- |
 | Arch Linux | ⚠️ | Untested |
 | Bazzite | ⚠️ | Untested |
+| CachyOS | ✅ | CachyOS needs some tweaks, see them [here](https://vulps22.github.io/somnilux/distros/cachyos/) |
 | Debian | ⚠️ | Untested |
 | Fedora | ⚠️ | Untested |
 | Linux Mint | ✅ | |
@@ -207,7 +208,7 @@ Somnium Space has been confirmed to run with the following OpenXR runtimes:
 | Runtime | Stable | Headsets | Notes |
 | --- | --- | --- | --- |
 | SteamVR | ✅ | Quest 3 | |
-| WiVRn | ✅ | Quest3, Quest 3s |  |
+| WiVRn | ✅ | Quest 3, Quest 3S, PICO 4 Ultra | |
 | Monado | ⚠️ | | Untested |
 
 Untested doesn't mean broken — just that nobody has reported back yet. If
