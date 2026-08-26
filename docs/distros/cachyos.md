@@ -29,10 +29,17 @@ The [debug log](../troubleshooting/launch-log.md) shows it as:
 run_in_prefix: umu-run returned rc=254
 ```
 
-**The fix:** run `install.sh` again and choose **Repair**. It finds the
-existing install, re-applies the patches, and creates the three missing
-pieces. If it can't find the install at the default location it asks you for
-the path.
+**The fix:** run `install.sh` again and choose the second menu entry —
+**Configure an existing installation**. It finds the install, re-applies the
+patches, and creates the three missing pieces. If it can't find it at the
+default location it asks you for the path.
+
+!!! note "Why it doesn't say \"Repair\""
+    That entry reads *Repair an existing install* once Somnilux has a
+    remembered install location. Writing that location down is one of the
+    steps that got skipped, so on this run it reads *Configure an existing
+    installation* instead. Same thing, and after it finishes you'll get the
+    Repair wording from then on.
 
 Tracked as [#21](https://github.com/Vulps22/somnilux/issues/21).
 
