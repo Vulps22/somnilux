@@ -134,6 +134,11 @@ installed or aren't being used. Run the installer and choose **repair**.
 Check the `Detected OXR Runtime:` line in the log. If it says `none detected`,
 the above is overwhelmingly the most likely reason.
 
+On **WiVRn** it is close to guaranteed: WiVRn deletes the runtime manifest
+when the server starts and writes it back only once a headset connects, so
+launching in between leaves detection with nothing to find. See
+[WiVRn, specifically](../run/vr-runtimes.md#wivrn-specifically).
+
 Otherwise, detection runs at every launch, so setting a different runtime
 active and starting Somnium again is all that's needed — no reinstall. See
 [VR runtimes](../run/vr-runtimes.md), including `openxr.conf` for runtimes
