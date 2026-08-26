@@ -65,6 +65,8 @@ nav:
       - Distribution notes: troubleshooting/distributions.md
       - Known issues: troubleshooting/known-issues.md
       - Reporting a problem: troubleshooting/reporting.md
+  - Distro tips & tricks:
+      - CachyOS: distros/cachyos.md
   - Understanding:
       - What's fixed and why: understanding/whats-fixed.md
       - What the installer does: understanding/what-the-installer-does.md

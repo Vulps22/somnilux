@@ -8,18 +8,19 @@ no Steam, and no `sudo`. What's left is a short list of things that do vary.
 
 ✅ confirmed · ⚠️ untested · ❌ known broken
 
-| Distribution | Status |
-| --- | --- |
-| Linux Mint | ✅ |
-| Nobara 44 | ✅ |
-| Arch Linux | ⚠️ |
-| Bazzite | ⚠️ |
-| Debian | ⚠️ |
-| Fedora | ⚠️ |
-| Manjaro | ⚠️ |
-| openSUSE | ⚠️ |
-| Pop!_OS | ⚠️ |
-| Ubuntu | ⚠️ |
+| Distribution | Status | Notes |
+| --- | --- | --- |
+| CachyOS | ✅ | CachyOS needs some tweaks, see them [here](../distros/cachyos.md) |
+| Linux Mint | ✅ | |
+| Nobara 44 | ✅ | |
+| Arch Linux | ⚠️ | |
+| Bazzite | ⚠️ | |
+| Debian | ⚠️ | |
+| Fedora | ⚠️ | |
+| Manjaro | ⚠️ | |
+| openSUSE | ⚠️ | |
+| Pop!_OS | ⚠️ | |
+| Ubuntu | ⚠️ | |
 
 Untested means nobody has reported back, not that it's broken. If you get
 Somnilux working on something in that list or on something not listed at all,
