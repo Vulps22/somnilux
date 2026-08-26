@@ -35,6 +35,25 @@ Envision builds — need nothing extra.
 System-wide **Flatpak** and **`/opt`** installs have their install directory
 shared into the container automatically.
 
+## WiVRn, specifically
+
+WiVRn is the clearest case of why the headset has to come first, because with
+WiVRn the runtime file genuinely isn't there yet.
+
+Detection looks for the active OpenXR runtime manifest, normally:
+
+```
+~/.config/openxr/1/active_runtime.json
+```
+
+WiVRn manages that file itself. Starting the server **removes** it, and it is
+written only once a headset has actually connected. So in the window between
+starting WiVRn and putting the headset on, there is no manifest at all —
+detection finds nothing, and Somnium starts in flat mode with no warning.
+
+Nothing is wrong when that happens, and nothing needs repairing. Close
+Somnium, connect the headset, wait for WiVRn to report it, and launch again.
+
 ## Confirmed working
 
 ✅ confirmed · ⚠️ untested · ❌ known broken
