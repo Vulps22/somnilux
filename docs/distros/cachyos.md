@@ -47,8 +47,8 @@ Tracked as [#21](https://github.com/Vulps22/somnilux/issues/21).
 
 **What you see:** with no VR runtime running, everything works and Somnium
 starts in desktop mode. With a WiVRn session live, the launcher disappears the
-moment file verification finishes — no crash dialog, no message, the whole
-thing is just gone.
+moment file verification finishes. No crash dialog, no error, no message —
+the whole wine process tree is simply gone.
 
 `launch.log` ends with:
 
@@ -71,6 +71,18 @@ appear *while the launcher is running*, and that rescan is what sets it off.
 !!! warning "Close Somnium completely first"
     Wine rewrites `user.reg` when the prefix shuts down. Edit it while
     anything is still running and your change is thrown away.
+
+    Closing the window isn't proof it's finished — `wineserver` outlives it
+    by a few seconds, and the prefix isn't shut down until it exits. Check
+    with:
+
+    ```sh
+    pgrep -af 'Somnium Space|wineserver|-somnilux/files/'
+    ```
+
+    Edit `user.reg` once that prints nothing. If something is still listed
+    a minute later, launch Somnium again and let the
+    [restart prompt](../run/restarting.md) clear the stuck session.
 
 Open `user.reg` in your install location, find the section headed:
 
@@ -110,4 +122,4 @@ Tracked as [#22](https://github.com/Vulps22/somnilux/issues/22).
 | Somnilux | `install.sh` 3.1, GE-Proton11-5-somnilux, umu-launcher 1.4.4, binaries build-1 |
 | Locale | `fr_FR.UTF-8` |
 
-With thanks to the user who worked both of these out and wrote them up.
+With thanks to **@Zutyo.sh**, who worked both of these out and wrote them up.
