@@ -1,5 +1,20 @@
 # Somnilux
 
+> [!WARNING]
+> **Somnilux is being retired in favour of [Unilux](https://github.com/Zutyosh/unilux)**,
+> which builds on Somnilux's patches. To switch, run the final Somnilux
+> installer. It installs Unilux, offers to remove your Somnilux setup (Somnilux
+> itself, its patched Proton, and the Wine prefix with Somnium), then starts
+> Unilux:
+>
+> ```sh
+> curl -LO https://github.com/Vulps22/somnilux/releases/latest/download/install.sh
+> chmod +x install.sh
+> ./install.sh
+> ```
+>
+> Everything below describes Somnilux 3.x and is kept for reference.
+
 **Somnium Space on Linux**
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)

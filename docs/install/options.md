@@ -11,6 +11,11 @@ Run `./install.sh --help` at any time for the same list.
 
 ## `--force-outdated-fixes`
 
+!!! note "Removed in 4.0"
+    The final installer only migrates to Unilux, so this flag is gone. It
+    applies to Somnilux 3.x installers only.
+
+
 Skip the **"Update needed"** warning shown when newer patched binaries have
 been published than this installer knows how to install.
 
