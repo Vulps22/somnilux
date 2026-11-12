@@ -6,6 +6,21 @@ Wine/Proton patches and setup tooling for running
 [Somnium Space](https://somniumspace.com) on Linux, in the absence of an
 official Linux-native client (currently in closed beta, per Somnium staff).
 
+!!! warning "Somnilux is retired — move to Unilux"
+    Somnilux is being retired in favour of
+    [Unilux](https://github.com/Zutyosh/unilux), which builds on its patches.
+    Run the final Somnilux installer to switch: it installs Unilux, offers to
+    remove your Somnilux setup, and starts Unilux. See
+    [Moving to Unilux](install/updating.md).
+
+    ```sh
+    curl -LO https://github.com/Vulps22/somnilux/releases/latest/download/install.sh
+    chmod +x install.sh
+    ./install.sh
+    ```
+
+    The rest of this site describes Somnilux 3.x and is kept for reference.
+
 ## Quick start
 
 **1. Get Somnium Space's own Windows installer** from
