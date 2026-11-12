@@ -9,6 +9,10 @@ modified — removing it is a matter of deleting directories.
     your Somnium install and settings — see
     [Installing](installing.md#repairing-an-existing-install).
 
+!!! tip "Moving to Unilux?"
+    The final Somnilux installer offers to remove everything below for you
+    after it installs Unilux. See [Moving to Unilux](updating.md).
+
 ## What to remove
 
 ### 1. Somnilux's own directory

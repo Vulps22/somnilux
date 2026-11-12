@@ -271,7 +271,7 @@ package() {
     rm -f "$ARCHIVE"
     tar -czf "$ARCHIVE" -C "$OUT_DIR" . || die "failed to create $ARCHIVE"
     info "$(printf '%10d  %s' "$(stat -c%s "$ARCHIVE")" "$ARCHIVE")"
-    info "install with: install.sh --use-local-dlls-at $ARCHIVE"
+    info "install with a Somnilux 3.x installer: install.sh --use-local-dlls-at $ARCHIVE"
 }
 
 main() {
