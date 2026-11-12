@@ -10,8 +10,8 @@ modified — removing it is a matter of deleting directories.
     [Installing](installing.md#repairing-an-existing-install).
 
 !!! tip "Moving to Unilux?"
-    The final Somnilux installer removes everything below for you, item by
-    item, after it installs Unilux. See [Moving to Unilux](updating.md).
+    The final Somnilux installer offers to remove everything below for you
+    after it installs Unilux. See [Moving to Unilux](updating.md).
 
 ## What to remove
 

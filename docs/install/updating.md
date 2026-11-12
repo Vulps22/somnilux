@@ -23,11 +23,11 @@ It does the following, in order:
    published SHA-256, and unpacks it into `~/.local/opt/unilux`, linked as
    `~/.local/bin/unilux` and `~/.local/bin/unilux-gui`. If any of this fails,
    nothing else is changed and your Somnilux install keeps working.
-3. Asks which parts of the old setup to remove, all selected by default:
+3. Recommends removing Somnilux, Somnium Space and all supporting files:
    Somnilux itself and its menu entry, the patched `-somnilux` Proton copy,
-   and the Wine prefix with Somnium in it. Removing them is recommended,
-   because Unilux installs its own Proton, prefix and Somnium. Untick the
-   prefix if you want to keep Somnium's settings and cached data.
+   and the Wine prefix with Somnium in it. Unilux uses its own Somnium Space
+   installation. Choose **No** to keep everything, for example to hold on to
+   Somnium's settings and cached data in the prefix.
 4. If you're in a graphical session, adds **Unilux** and **Unilux-CLI** to
    your application menu.
 5. Asks whether to start the Unilux desktop app or its command line. Without a

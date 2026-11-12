@@ -26,14 +26,14 @@ CURL_TIMEOUT_OPTS_LARGE=(--connect-timeout 10 --max-time 600)
 UNILUX_URL="https://github.com/Zutyosh/unilux"
 # Overridable so the migration can be tested against a local release.
 UNILUX_RELEASE_API="${UNILUX_RELEASE_API:-https://api.github.com/repos/Zutyosh/unilux/releases/latest}"
-UNILUX_ICON_URL="https://raw.githubusercontent.com/Zutyosh/unilux/main/assets/unilux-256.png"
+UNILUX_ICON_BASE="https://raw.githubusercontent.com/Zutyosh/unilux/main/assets"
 UNILUX_DIR="$HOME/.local/opt/unilux"
 LOCAL_BIN="$HOME/.local/bin"
 UNILUX_CLI_LINK="$LOCAL_BIN/unilux"
 UNILUX_GUI_LINK="$LOCAL_BIN/unilux-gui"
 UNILUX_CLI_SHELL="$UNILUX_DIR/cli-shell.sh"
 APPS_DIR="$HOME/.local/share/applications"
-ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+ICON_ROOT="$HOME/.local/share/icons/hicolor"
 
 SOMNILUX_DIR="$HOME/.local/share/somnilux"
 SOMNILUX_DESKTOP="$APPS_DIR/somnium-space.desktop"
@@ -129,7 +129,7 @@ ui_menu() {
         shift 2
     done
     while true; do
-        read -r -p "Enter choice [1-$__um_i]: " __um_choice
+        read -r -p "Enter choice [1-$__um_i]: " __um_choice || return 1
         if [ "$__um_choice" -ge 1 ] 2>/dev/null && [ "$__um_choice" -le "$__um_i" ] 2>/dev/null; then
             __um_out="${__um_tags[$((__um_choice - 1))]}"
             return 0
@@ -138,44 +138,33 @@ ui_menu() {
     done
 }
 
-# ui_checklist outvar title prompt tag1 text1 on|off [tag2 text2 on|off ...]
-# Writes the chosen tags, space-separated, into outvar. Cancel selects none.
-ui_checklist() {
-    local -n __uc_out="$1"
-    shift
-    local __uc_title="$1" __uc_prompt="$2"
-    shift 2
-    __uc_out=""
-    dbg "ui_checklist: enter title=[$__uc_title]"
+# ui_yesno title prompt yes_label no_label
+# Returns 0 for yes, 1 for no or cancel. Enter picks yes.
+ui_yesno() {
+    local title="$1" prompt="$2" yes="$3" no="$4" ans
+    dbg "ui_yesno: enter title=[$title]"
 
     if [ "$HAVE_WHIPTAIL" -eq 1 ]; then
         sleep 0.2
-        local __uc_args=() __uc_res __uc_rc=0
-        while [ $# -gt 0 ]; do
-            __uc_args+=("$1" "$2" "$( [ "$3" = on ] && echo ON || echo OFF )")
-            shift 3
-        done
-        __uc_res=$(whiptail --backtitle "$BACKTITLE" --title "$__uc_title" --notags \
-            --checklist "$__uc_prompt" 20 78 4 "${__uc_args[@]}" 3>&1 1>&2 2>&3) || __uc_rc=$?
-        dbg "ui_checklist: rc=$__uc_rc out=[$__uc_res]"
-        [ "$__uc_rc" -eq 0 ] && __uc_out=$(printf '%s' "$__uc_res" | tr -d '"')
-        return 0
+        local rc=0
+        whiptail --backtitle "$BACKTITLE" --title "$title" --yes-button "$yes" \
+            --no-button "$no" --yesno "$prompt" 16 78 1>&2 || rc=$?
+        dbg "ui_yesno: rc=$rc"
+        return "$rc"
     fi
 
-    echo "== $__uc_title ==" >&2
-    echo "$__uc_prompt" >&2
-    local __uc_ans __uc_def
-    while [ $# -gt 0 ]; do
-        if [ "$3" = on ]; then __uc_def="Y/n"; else __uc_def="y/N"; fi
-        read -r -p "  $2? [$__uc_def] " __uc_ans || __uc_ans=""
-        case "${__uc_ans:-$([ "$3" = on ] && echo y || echo n)}" in
-            [Yy]*) __uc_out="$__uc_out $1" ;;
+    echo "== $title ==" >&2
+    echo "$prompt" >&2
+    echo "  1) $yes" >&2
+    echo "  2) $no" >&2
+    while true; do
+        read -r -p "Enter choice [1-2, Enter for 1]: " ans || ans=2
+        case "${ans:-1}" in
+            1) return 0 ;;
+            2) return 1 ;;
         esac
-        shift 3
+        echo "Invalid choice." >&2
     done
-    __uc_out="${__uc_out# }"
-    dbg "ui_checklist: fallback chose [$__uc_out]"
-    return 0
 }
 
 # ui_msg title message [height] [width]
@@ -305,7 +294,7 @@ retirement_notice() {
 
   $UNILUX_URL
 
-Unilux installs, launches and troubleshoots Somnium Space on Linux, with a desktop app and a command line. It builds on Somnilux's patches.
+Unilux builds on the work I did with Somnilux to provide a greatly improved user experience, better access to debugging and performance tools, and fixes a number of issues users have reported since the launch of Somnilux.
 
 Press Enter to install Unilux." 18
 }
@@ -398,7 +387,7 @@ safe_to_delete() {
 # Unilux installs its own Proton, prefix and Somnium.
 remove_somnilux() {
     cache_load || true
-    local prefix="${CACHED_PREFIX:-$DEFAULT_PREFIX}" protons=() p items=() chosen
+    local prefix="${CACHED_PREFIX:-$DEFAULT_PREFIX}" protons=() p items=()
 
     if [ -n "$CACHED_PROTON" ]; then
         protons+=("$CACHED_PROTON")
@@ -410,7 +399,7 @@ remove_somnilux() {
     dbg "remove_somnilux: prefix=[$prefix] protons=[${protons[*]:-}]"
 
     if [ -d "$SOMNILUX_DIR" ] || [ -f "$SOMNILUX_DESKTOP" ]; then
-        items+=(somnilux "Somnilux itself and its Somnium Space menu entry" on)
+        items+=(somnilux)
     fi
     local have_proton=0
     for p in ${protons[@]+"${protons[@]}"}; do
@@ -418,9 +407,9 @@ remove_somnilux() {
         case "$p" in */compatibilitytools.d/*) continue ;; esac
         safe_to_delete "$p" && have_proton=1
     done
-    [ "$have_proton" -eq 1 ] && items+=(proton "Somnilux's patched Proton copy (a few GB)" on)
+    [ "$have_proton" -eq 1 ] && items+=(proton)
     if safe_to_delete "$prefix" && [ -d "$prefix/drive_c" ]; then
-        items+=(prefix "The Wine prefix and Somnium Space in it ($prefix)" on)
+        items+=(prefix)
     fi
 
     if [ "${#items[@]}" -eq 0 ]; then
@@ -428,12 +417,12 @@ remove_somnilux() {
         return 0
     fi
 
-    ui_checklist chosen "Remove Somnilux?" "Unilux is installed. Remove the old Somnilux setup?
-
-Recommended: Unilux installs its own Proton, Wine prefix and copy of Somnium Space, so these are no longer used. Removing the prefix also removes Somnium's settings and cached data stored in it." \
-        "${items[@]}"
-    dbg "remove_somnilux: chosen=[$chosen]"
-    [ -n "$chosen" ] || { echo "Keeping the Somnilux setup."; return 0; }
+    if ! ui_yesno "Remove Somnilux?" "It is recommended to uninstall Somnilux, Somnium Space, and all supporting files, before launching Unilux. Unilux uses its own Somnium Space installation. This step is optional." "Yes (Recommended)" "No"; then
+        echo "Keeping the Somnilux setup."
+        return 0
+    fi
+    local chosen=" ${items[*]} "
+    dbg "remove_somnilux: removing [$chosen]"
 
     stop_running_somnium
 
@@ -469,14 +458,31 @@ gui_capable() {
 }
 
 create_unilux_menu_entries() {
-    local icon_line=""
-    mkdir -p "$APPS_DIR" "$ICON_DIR"
-    if curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$ICON_DIR/unilux.png.tmp" "$UNILUX_ICON_URL" 2>>"$DEBUG_LOG"; then
-        mv "$ICON_DIR/unilux.png.tmp" "$ICON_DIR/unilux.png"
-        icon_line="Icon=$ICON_DIR/unilux.png"
+    local icon_line="" size
+    mkdir -p "$APPS_DIR"
+    for size in 256 512; do
+        mkdir -p "$ICON_ROOT/${size}x${size}/apps"
+        if curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$ICON_ROOT/${size}x${size}/apps/unilux.png.tmp" \
+                "$UNILUX_ICON_BASE/unilux-$size.png" 2>>"$DEBUG_LOG"; then
+            mv "$ICON_ROOT/${size}x${size}/apps/unilux.png.tmp" "$ICON_ROOT/${size}x${size}/apps/unilux.png"
+            icon_line="Icon=unilux"
+        else
+            rm -f "$ICON_ROOT/${size}x${size}/apps/unilux.png.tmp"
+            dbg "create_unilux_menu_entries: ${size}px icon download failed"
+        fi
+    done
+    mkdir -p "$ICON_ROOT/scalable/apps"
+    if curl -fsSL "${CURL_TIMEOUT_OPTS[@]}" -o "$ICON_ROOT/scalable/apps/unilux.svg.tmp" \
+            "$UNILUX_ICON_BASE/unilux-logo.svg" 2>>"$DEBUG_LOG"; then
+        mv "$ICON_ROOT/scalable/apps/unilux.svg.tmp" "$ICON_ROOT/scalable/apps/unilux.svg"
+        icon_line="Icon=unilux"
     else
-        rm -f "$ICON_DIR/unilux.png.tmp"
-        dbg "create_unilux_menu_entries: icon download failed, continuing without"
+        rm -f "$ICON_ROOT/scalable/apps/unilux.svg.tmp"
+        dbg "create_unilux_menu_entries: svg icon download failed"
+    fi
+    touch "$ICON_ROOT" 2>/dev/null || true
+    if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f "$ICON_ROOT/index.theme" ]; then
+        gtk-update-icon-cache -q -t "$ICON_ROOT" >/dev/null 2>&1 || true
     fi
 
     cat > "$APPS_DIR/unilux.desktop" <<EOF
@@ -506,6 +512,12 @@ EOF
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
     fi
+    for tool in kbuildsycoca6 kbuildsycoca5; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            "$tool" >/dev/null 2>&1 || true
+            break
+        fi
+    done
     echo "Created menu entries: Unilux, Unilux-CLI"
 }
 
